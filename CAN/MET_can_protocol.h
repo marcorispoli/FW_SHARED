@@ -214,7 +214,8 @@
             uint8_t d[4]; //!< Register data content
         }MET_Register_t;
         
-        
+        #define MET_COMMAND_ABORT 0 //!< This is the reserved command code for the ABORT command
+
         /**
          * @brief This is the Command Error eenumeration
          */
@@ -225,6 +226,7 @@
             MET_CAN_COMMAND_NOT_ENABLED = 3,    //!< The Command cannot be momentary executed 
             MET_CAN_COMMAND_NOT_AVAILABLE = 4,  //!< The Command cannot be executed in this revision      
             MET_CAN_COMMAND_WRONG_RETURN_CODE = 5,  //!< The Command returned a non valid status code
+            MET_CAN_COMMAND_ABORT_CODE = 6,         //!< The Command has been Aborted
             MET_CAN_COMMAND_APPLICATION_ERRORS  //!< Starting code for applicaiton specific errors                    
         }MET_CommandErrors_t;
         
@@ -233,20 +235,16 @@
          * 
          */
         typedef enum{
-            MET_CAN_COMMAND_COMPLETED = 0,  //!< The Command has been processed successfully
-            MET_CAN_COMMAND_EXECUTING = 1,  //!< The Command is processing
-            MET_CAN_COMMAND_ERROR = 2,      //!< The Command has been terminated with error condition
+            MET_CAN_COMMAND_EXECUTING = 1,       //!< The Command is processing
+            MET_CAN_COMMAND_EXECUTED,            //!< The Command has been processed successfully
+            MET_CAN_COMMAND_ERROR,               //!< The Command has been terminated with error condition
+            MET_CAN_COMMAND_STATUS_UNASSIGNED,   //!< The Application forgot to assign a correct return code
         }MET_CommandExecStatus_t;
         
+       
         /**
-         * @brief This is the data structure the application shall return from the 
-         * command Handler routine
+         * @brief Command data structure for the Command Execution
          */
-        typedef struct{
-            MET_CommandExecStatus_t status; //!< Returning execution status code
-            uint8_t result[2];              //!< result command data
-            uint8_t error;                  //!< Error code in case of unsuccess;        
-        }MET_CommandExecReturn_t; 
         
         typedef struct {
          uint8_t command;   //!< D0 - This is the command code
@@ -281,7 +279,7 @@
          uint8_t min;  //!< D1 - This is the minor revision number
          uint8_t sub;  //!< D2 - This is the Sub-minor revision number
          uint8_t d3;   //!< D3 - NA
-       }MET_Revision_Status_t;
+       }MET_Revision_Register_t;
        
        /** 
         * ***ERRORS STATUS REGISTER***
@@ -304,7 +302,7 @@
          uint8_t mom1;  //!< D1 - This is the Momentary error byte 1
          uint8_t pers0;  //!< D2 - This is the Persisten error byte 0
          uint8_t pers1;   //!< D3 - This is the Persisten error byte 1
-       }MET_Errors_Status_t;
+       }MET_Errors_Register_t;
 
         
         /** 
@@ -312,23 +310,12 @@
         * 
         * This is the structure of the Command register content.
         * 
-        * The register data content is:
-        * 
-        * |BYTE|DESCRIPTION|
-        * |:---:|:---|
-        * |D0|Command code of the last command requested|
-        * |D1|Sequence number of the command request frame|
-        * |D2|Current execution status|
-        * |D3|Error condition|
-        * 
-        * 
         */  
        typedef struct {
-         uint8_t command;  //!< D0 - This is the last execution command
-         uint8_t seq;      //!< D1 - This is the sequence number
-         uint8_t stat;     //!< D2 - This is the execution status (see _CommandExecStatus_e )
-         uint8_t error;    //!< D3 - This is a optiona error condition
-       }_Command_Status_t;
+            MET_CommandExecStatus_t status; //!< Command execution status code
+            uint8_t result[2];              //!< Command result data
+            uint8_t error;                  //!< Command error code in case of unsuccess; 
+       }MET_Command_Register_t;
            
        
        /**
@@ -406,35 +393,44 @@
         
         
         /// Returns the pointer to the Application Data register array
-        uint8_t  MET_Can_Protocol_GetData(uint8_t idx, uint8_t data_index);
+        ext uint8_t  MET_Can_Protocol_GetData(uint8_t idx, uint8_t data_index);
     
         // The function tests the content of a Data register with a mask byte
-        bool  MET_Can_Protocol_TestData(uint8_t idx, uint8_t data_index, uint8_t mask);
+        ext bool  MET_Can_Protocol_TestData(uint8_t idx, uint8_t data_index, uint8_t mask);
         
         /// Returns the pointer to the Application PARAMETER register array
-        uint8_t  MET_Can_Protocol_GetParameter(uint8_t idx, uint8_t data_index);
+        ext uint8_t  MET_Can_Protocol_GetParameter(uint8_t idx, uint8_t data_index);
     
         // The function tests the content of a PARAMETER register with a mask byte
-        bool  MET_Can_Protocol_TestParameter(uint8_t idx, uint8_t data_index, uint8_t mask);
+        ext bool  MET_Can_Protocol_TestParameter(uint8_t idx, uint8_t data_index, uint8_t mask);
         
         
         /// Returns the current command execution code
-        uint8_t MET_Can_Protocol_getCommandCode(void);
+        ext uint8_t MET_Can_Protocol_getCommandCode(void);
         
         /// Returns the current command parameter 0
-        uint8_t MET_Can_Protocol_getCommandParam0(void);
+        ext uint8_t MET_Can_Protocol_getCommandParam0(void);
         
         /// Returns the current command parameter 1
-        uint8_t MET_Can_Protocol_getCommandParam1(void);
+        ext uint8_t MET_Can_Protocol_getCommandParam1(void);
         
         /// Returns the current command parameter 2
-        uint8_t MET_Can_Protocol_getCommandParam2(void);
+        ext uint8_t MET_Can_Protocol_getCommandParam2(void);
         
         /// Returns the current command parameter 3
-        uint8_t MET_Can_Protocol_getCommandParam3(void);
+        ext uint8_t MET_Can_Protocol_getCommandParam3(void);
 
-        /// Set the execution returning code
-        void MET_Can_Protocol_setReturnCommand(MET_CommandExecStatus_t retstat, uint8_t ris0, uint8_t ris1, uint8_t error);
+        /// Set the COMMAND EXECUTION return code
+        ext void MET_Can_Protocol_returnCommandExecuting(void);
+        
+        /// Set the COMMAND EXECUTED return code
+        ext void MET_Can_Protocol_returnCommandExecuted(uint8_t ris0, uint8_t ris1);
+        
+        /// Set the COMMAND ERROR return code
+        ext void MET_Can_Protocol_returnCommandError(uint8_t err);
+        
+        /// Set the COMMAND ABORTED  return code
+        ext void MET_Can_Protocol_returnCommandAborted(void);
         
         /** @}*/  // metCanRegApi
 

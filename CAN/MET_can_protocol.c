@@ -59,9 +59,9 @@
         typedef struct {
             uint8_t deviceID; //!< This is the device ID from 1:255
 
-            MET_Register_t revisionRegister;  //!< Revision Status Register
-            MET_Register_t errorsRegister;          //!< Errors register
-            MET_Register_t commandRegister;         //!< Command Execution  register
+            MET_Revision_Register_t     revisionRegister;        //!< Revision Register
+            MET_Errors_Register_t       errorsRegister;          //!< Errors register
+            MET_Command_Register_t      commandRegister;         //!< Command Execution  register
                         
             MET_Register_t  pApplicationStatusArray[MET_CAN_STATUS_REGISTERS]; //!< This is the Application Status Register array pointer
             uint8_t     applicationStatusArrayLen; //!< This is the Application Status Register array lenght
@@ -72,8 +72,7 @@
             MET_Register_t   pApplicationParameterArray[MET_CAN_PARAM_REGISTERS]; //!< This is the Application PARAMETER Register array pointer
             uint8_t     applicationParameterArrayLen; //!< This is the Application PARAMETER Register array lenght
             
-            MET_Command_Data_t      commandData; //!< Data for the executing command
-            MET_CommandExecReturn_t retCommand; //!< Return command code
+            MET_Command_Data_t      commandData; //!< Data for the executing command            
             MET_commandHandler_t applicationCommandHandler; //!< This is the application command handler
             
         } MET_Protocol_Data_t;
@@ -191,10 +190,23 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
     // Harmony 3 library call: Init memory of the CAN Bus module
     CAN0_MessageRAMConfigSet(Can0MessageRAM);
     
-    ((MET_Revision_Status_t*)&MET_Protocol_Data_Struct.revisionRegister)->maj = MET_CAN_APP_MAJ_REV;
-    ((MET_Revision_Status_t*)&MET_Protocol_Data_Struct.revisionRegister)->min = MET_CAN_APP_MIN_REV;
-    ((MET_Revision_Status_t*)&MET_Protocol_Data_Struct.revisionRegister)->sub = MET_CAN_APP_SUB_REV;
-        
+    // Assignes the Application Revision code to the revision register
+    MET_Protocol_Data_Struct.revisionRegister.maj = MET_CAN_APP_MAJ_REV;
+    MET_Protocol_Data_Struct.revisionRegister.min = MET_CAN_APP_MIN_REV;
+    MET_Protocol_Data_Struct.revisionRegister.sub = MET_CAN_APP_SUB_REV;
+    
+    // Clears the Command register 
+    MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_EXECUTED;
+    MET_Protocol_Data_Struct.commandRegister.result[0] = 0;
+    MET_Protocol_Data_Struct.commandRegister.result[1] = 0;
+    MET_Protocol_Data_Struct.commandRegister.error = MET_CAN_COMMAND_NO_ERROR;
+    
+    // Clears the Errors register
+    MET_Protocol_Data_Struct.errorsRegister.mom0=0;
+    MET_Protocol_Data_Struct.errorsRegister.mom1=0;
+    MET_Protocol_Data_Struct.errorsRegister.pers0=0;
+    MET_Protocol_Data_Struct.errorsRegister.pers1=0;
+    
     // Add the external STATUS register array 
     MET_Protocol_Data_Struct.applicationStatusArrayLen = MET_CAN_STATUS_REGISTERS;
     
@@ -306,10 +318,10 @@ void  MET_Can_Protocol_SetErrorsBit(MET_CAN_ERROR_BYTE_t data_index, uint8_t mas
     
     if(data_index > 3) return;
     
-    uint8_t data = MET_Protocol_Data_Struct.errorsRegister.d[data_index];
+    uint8_t data = ((uint8_t*)(&MET_Protocol_Data_Struct.errorsRegister))[data_index];
     data &= (~mask);
-    if(stat) data |= mask;        
-    MET_Protocol_Data_Struct.errorsRegister.d[data_index] = data;  
+    if(stat) data |= mask;   
+    ((uint8_t*)(&MET_Protocol_Data_Struct.errorsRegister))[data_index] = data;
     
 }
 
@@ -322,7 +334,7 @@ void  MET_Can_Protocol_SetErrorsBit(MET_CAN_ERROR_BYTE_t data_index, uint8_t mas
  */
 uint8_t  MET_Can_Protocol_GetErrors(MET_CAN_ERROR_BYTE_t data_index){
     if(data_index > 3) return 0;
-    return MET_Protocol_Data_Struct.errorsRegister.d[data_index];    
+    return ((uint8_t*)(&MET_Protocol_Data_Struct.errorsRegister))[data_index];    
 }
 
  /**
@@ -336,7 +348,7 @@ uint8_t  MET_Can_Protocol_GetErrors(MET_CAN_ERROR_BYTE_t data_index){
 bool  MET_Can_Protocol_TestErrors(MET_CAN_ERROR_BYTE_t data_index, uint8_t mask){
     if(data_index > 3) return false;
 
-    uint8_t data = MET_Protocol_Data_Struct.errorsRegister.d[data_index];
+    uint8_t data = ((uint8_t*)(&MET_Protocol_Data_Struct.errorsRegister))[data_index];
     data &= (~mask);
     data |= (mask);
     if(data) return true;
@@ -444,16 +456,35 @@ uint8_t inline MET_Can_Protocol_getCommandParam3(void){
     return MET_Protocol_Data_Struct.commandData.param[3];
 }
 
-void MET_Can_Protocol_setReturnCommand(MET_CommandExecStatus_t retstat, uint8_t ris0, uint8_t ris1, uint8_t error){
-    MET_Protocol_Data_Struct.retCommand.status = retstat;
-    MET_Protocol_Data_Struct.retCommand.result[0] = ris0;
-    MET_Protocol_Data_Struct.retCommand.result[1] = ris1;
-    MET_Protocol_Data_Struct.retCommand.error = error;
+void MET_Can_Protocol_returnCommandExecuting(void){
+    MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_EXECUTING;
+    MET_Protocol_Data_Struct.commandRegister.result[0] = 0;
+    MET_Protocol_Data_Struct.commandRegister.result[1] = 0;
+    MET_Protocol_Data_Struct.commandRegister.error = 0;
+    return;
+}
+
+void MET_Can_Protocol_returnCommandExecuted(uint8_t ris0, uint8_t ris1){
+    MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_EXECUTED;
+    MET_Protocol_Data_Struct.commandRegister.result[0] = ris0;
+    MET_Protocol_Data_Struct.commandRegister.result[1] = ris1;
+    MET_Protocol_Data_Struct.commandRegister.error = 0;
+    return;
+}
+
+void MET_Can_Protocol_returnCommandError(uint8_t err){
+    MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_ERROR;
+    MET_Protocol_Data_Struct.commandRegister.error = err;
     return;
 }
         
-        
-        
+void MET_Can_Protocol_returnCommandAborted(void){
+    MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_ERROR;
+    MET_Protocol_Data_Struct.commandRegister.error = MET_CAN_COMMAND_ABORT_CODE;
+    return;
+}
+
+
         
 /**
  * 
@@ -514,8 +545,6 @@ void MET_Can_Protocol_Loop(void){
         memcpy(MET_Can_Protocol_RxTx_Struct.tx_message, MET_Can_Protocol_RxTx_Struct.rx_message,8);
         
         
-        
-        
         // Identifies the Protocol command
         switch(cmdFrame->frame_cmd){
             case MET_CAN_PROTOCOL_READ_REVISION:
@@ -526,14 +555,12 @@ void MET_Can_Protocol_Loop(void){
                 memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.errorsRegister, sizeof(MET_Register_t));                    
                 
                 // Clears the momentary error bytes
-                ((MET_Errors_Status_t*) (MET_Protocol_Data_Struct.errorsRegister.d))->mom0 = 0;
-                ((MET_Errors_Status_t*) (MET_Protocol_Data_Struct.errorsRegister.d))->mom1 = 0;
-                
+                MET_Protocol_Data_Struct.errorsRegister.mom0 = 0;
+                MET_Protocol_Data_Struct.errorsRegister.mom1 = 0;                
                 break;
             
             case MET_CAN_PROTOCOL_READ_COMMAND:
-                memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Register_t));
-                
+                memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Register_t));                
                 break;
                 
             case MET_CAN_PROTOCOL_READ_STATUS:
@@ -606,54 +633,48 @@ void MET_Can_Protocol_Loop(void){
             
             case MET_CAN_PROTOCOL_COMMAND_EXEC:
                 
-                // Busy condition: command already in execution
-                if( ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->stat == MET_CAN_COMMAND_EXECUTING){
-                    MET_Protocol_Data_Struct.retCommand.status = MET_CAN_COMMAND_ERROR;
-                    MET_Protocol_Data_Struct.retCommand.error = MET_CAN_COMMAND_BUSY;
-                    MET_Protocol_Data_Struct.retCommand.result[0] = 0;
-                    MET_Protocol_Data_Struct.retCommand.result[1] = 0;
-                }else if(MET_Protocol_Data_Struct.applicationCommandHandler == 0){
-                    
-                    ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->seq = cmdFrame->seq;
-                    ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->command = cmdFrame->idx;
-                    ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->stat = MET_CAN_COMMAND_ERROR;
-                    ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->error = MET_CAN_COMMAND_NOT_AVAILABLE;
-                                                
-                    MET_Protocol_Data_Struct.retCommand.status = MET_CAN_COMMAND_ERROR;
-                    MET_Protocol_Data_Struct.retCommand.error = MET_CAN_COMMAND_NOT_AVAILABLE;
-                    MET_Protocol_Data_Struct.retCommand.result[0] = 0;
-                    MET_Protocol_Data_Struct.retCommand.result[1] = 0;
-                    
-                }else{
-                    
-                    // Sets the program data content for the Application command execution                                  
-                    memcpy(MET_Protocol_Data_Struct.commandData.param, cmdFrame->d, 4);
-                    
-                    // Calls the Application command handler
-                    MET_Protocol_Data_Struct.applicationCommandHandler();
-                    
-                    ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->seq = cmdFrame->seq;
-                    ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->command = cmdFrame->idx;
-                    
-                    // Verifies the results
-                    if(((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->command > MET_CAN_COMMAND_ERROR){
-                        ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->stat = MET_CAN_COMMAND_ERROR;
-                        ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->error = MET_CAN_COMMAND_WRONG_RETURN_CODE;
-                        MET_Protocol_Data_Struct.retCommand.status = MET_CAN_COMMAND_ERROR;
-                        MET_Protocol_Data_Struct.retCommand.error = MET_CAN_COMMAND_WRONG_RETURN_CODE;
-                        MET_Protocol_Data_Struct.retCommand.result[0] = 0;
-                        MET_Protocol_Data_Struct.retCommand.result[1] = 0;
-
-                    }else{
-                        ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->stat = MET_Protocol_Data_Struct.retCommand.status;
-                        ((_Command_Status_t*)(MET_Protocol_Data_Struct.commandRegister.d))->error = MET_Protocol_Data_Struct.retCommand.error;
-
-                    }
-
-                    // Copy the command result into the transmitting frame
-                    memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.retCommand, sizeof(MET_Register_t));                    
+                // Command execution handler not assigned by the application 
+                if(MET_Protocol_Data_Struct.applicationCommandHandler == 0){                        
+                        MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_ERROR;
+                        MET_Protocol_Data_Struct.commandRegister.error = MET_CAN_COMMAND_NOT_AVAILABLE;
+                        MET_Protocol_Data_Struct.commandRegister.result[0] = cmdFrame->idx;
+                        MET_Protocol_Data_Struct.commandRegister.result[1] = cmdFrame->seq;
+                        memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Register_t));    
+                        break;
                 }
                 
+                // Busy condition: command already in execution
+                if((cmdFrame->idx != MET_COMMAND_ABORT) && ( MET_Protocol_Data_Struct.commandRegister.status == MET_CAN_COMMAND_EXECUTING)){
+                    // The Command Register shall not be modified in this case
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[3])->status = MET_CAN_COMMAND_ERROR; 
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[3])->error = MET_CAN_COMMAND_BUSY; // Sequence code
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[3])->result[0] = cmdFrame->idx; // Command code
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[3])->result[1] = cmdFrame->seq; // Sequence code
+                    break;
+                }
+                
+                // Sets the program data content for the Application command execution                                  
+                memcpy(MET_Protocol_Data_Struct.commandData.param, cmdFrame->d, 4);
+                MET_Protocol_Data_Struct.commandData.command = cmdFrame->idx;
+        
+                // Pre assign a wrong status to check if the Application returns wih a correct code
+                MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_STATUS_UNASSIGNED;
+                
+                // Calls the Application command handler
+                MET_Protocol_Data_Struct.applicationCommandHandler();
+
+                // The Application should have assigned the correct returning code to the Command Register
+                if(MET_Protocol_Data_Struct.commandRegister.status > MET_CAN_COMMAND_ERROR){
+                    MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_ERROR;
+                    MET_Protocol_Data_Struct.commandRegister.error  = MET_CAN_COMMAND_WRONG_RETURN_CODE;
+                    MET_Protocol_Data_Struct.commandRegister.result[0] = cmdFrame->idx;
+                    MET_Protocol_Data_Struct.commandRegister.result[1] = cmdFrame->seq; 
+                
+                }else if(MET_Protocol_Data_Struct.commandRegister.status == MET_CAN_COMMAND_ERROR){
+                    MET_Protocol_Data_Struct.commandRegister.result[0] = cmdFrame->idx;
+                    MET_Protocol_Data_Struct.commandRegister.result[1] = cmdFrame->seq; 
+                }
+                memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Register_t));                                    
                 break;
             
         }
