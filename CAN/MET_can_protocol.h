@@ -242,20 +242,17 @@
         }MET_CommandExecStatus_t;
         
        
-        /**
-         * @brief Command data structure for the Command Execution
-         */
-        
-        typedef struct {
-         uint8_t command;   //!< D0 - This is the command code
-         uint8_t param[4];  //!< This is the command parameter array
-       }MET_Command_Data_t;
-
        
         /**
          * @brief This is the type definition for the Command callback function
-         */
-        typedef void (*MET_commandHandler_t)(void);
+         * 
+         * @Param cmd is the requested command code;
+         * @Param d0 is the optional command d0;
+         * @Param d1 is the optional command d1;
+         * @Param d2 is the optional command d2;
+         * @Param d3 is the optional command d3;
+         */       
+        typedef void (*MET_commandHandler_t)(uint8_t cmd, uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3);
         
         
         /** 
@@ -312,6 +309,7 @@
         * 
         */  
        typedef struct {
+            uint8_t command;                //!< Command Code
             MET_CommandExecStatus_t status; //!< Command execution status code
             uint8_t result[2];              //!< Command result data
             uint8_t error;                  //!< Command error code in case of unsuccess; 
@@ -377,19 +375,11 @@
         // The function tests the content of a STATUS register with a mask byte
         bool  MET_Can_Protocol_TestStatus(uint8_t idx, uint8_t data_index, uint8_t mask);
         
+        /// This function set a error condition
+        ext void  MET_Can_Protocol_SetErrors(uint8_t* mom0, uint8_t* mom1, uint8_t* pers0, uint8_t* pers1);
         
-        
-        /// Sets the bit-wise content of the ERRORS register        
-        ext void  MET_Can_Protocol_SetErrorsBit(MET_CAN_ERROR_BYTE_t data_index, uint8_t mask, bool stat);
-        
-        /// Sets the whole content of the ERRORS register        
-        ext void  MET_Can_Protocol_SetErrorsReg(MET_CAN_ERROR_BYTE_t data_index, uint8_t val );
-        
-        /// Returns the content of the ERRORS register array
-        ext uint8_t  MET_Can_Protocol_GetErrors(MET_CAN_ERROR_BYTE_t data_index);
-        
-        // The function tests the content of the ERRORS register with a mask byte
-        ext bool  MET_Can_Protocol_TestErrors(MET_CAN_ERROR_BYTE_t data_index, uint8_t mask);
+        /// This function get the current error condition        
+        ext void  MET_Can_Protocol_GetErrors(uint8_t* mom0, uint8_t* mom1, uint8_t* pers0, uint8_t* pers1);
         
         
         /// Returns the pointer to the Application Data register array
@@ -405,20 +395,6 @@
         ext bool  MET_Can_Protocol_TestParameter(uint8_t idx, uint8_t data_index, uint8_t mask);
         
         
-        /// Returns the current command execution code
-        ext uint8_t MET_Can_Protocol_getCommandCode(void);
-        
-        /// Returns the current command parameter 0
-        ext uint8_t MET_Can_Protocol_getCommandParam0(void);
-        
-        /// Returns the current command parameter 1
-        ext uint8_t MET_Can_Protocol_getCommandParam1(void);
-        
-        /// Returns the current command parameter 2
-        ext uint8_t MET_Can_Protocol_getCommandParam2(void);
-        
-        /// Returns the current command parameter 3
-        ext uint8_t MET_Can_Protocol_getCommandParam3(void);
 
         /// Set the COMMAND EXECUTION return code
         ext void MET_Can_Protocol_returnCommandExecuting(void);

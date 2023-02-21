@@ -71,8 +71,7 @@
 
             MET_Register_t   pApplicationParameterArray[MET_CAN_PARAM_REGISTERS]; //!< This is the Application PARAMETER Register array pointer
             uint8_t     applicationParameterArrayLen; //!< This is the Application PARAMETER Register array lenght
-            
-            MET_Command_Data_t      commandData; //!< Data for the executing command            
+                        
             MET_commandHandler_t applicationCommandHandler; //!< This is the application command handler
             
         } MET_Protocol_Data_t;
@@ -306,57 +305,42 @@ bool  MET_Can_Protocol_TestStatus(uint8_t idx, uint8_t data_index, uint8_t mask)
 }
 
 
-/**
- * This function set a bitmask value into a Byte of the ERRORS register
- * 
- * 
- * @param data_index index of the register data [0:3]
- * @param mask data mask
- * @param val value to be set 
- */
-void  MET_Can_Protocol_SetErrorsBit(MET_CAN_ERROR_BYTE_t data_index, uint8_t mask, bool stat){
-    
-    if(data_index > 3) return;
-    
-    uint8_t data = ((uint8_t*)(&MET_Protocol_Data_Struct.errorsRegister))[data_index];
-    data &= (~mask);
-    if(stat) data |= mask;   
-    ((uint8_t*)(&MET_Protocol_Data_Struct.errorsRegister))[data_index] = data;
-    
-}
 
 /**
- * This function return the ERRORS register byte content
+ * This function returns the current active errors
  * 
- * @param data_index index of the register data content [0:3]
- * @return the register content or 0 in case of out of index range
- * 
+ * @param mom0: momentary mom0 pointer
+ * @param mom1: momentary mom1 pointer
+ * @param pers0: persisten pers0 pointer
+ * @param pers1: persisten pers1 pointer
  */
-uint8_t  MET_Can_Protocol_GetErrors(MET_CAN_ERROR_BYTE_t data_index){
-    if(data_index > 3) return 0;
-    return ((uint8_t*)(&MET_Protocol_Data_Struct.errorsRegister))[data_index];    
-}
+void  MET_Can_Protocol_GetErrors(uint8_t* mom0, uint8_t* mom1, uint8_t* pers0, uint8_t* pers1){
+    if(mom0) *mom0 = MET_Protocol_Data_Struct.errorsRegister.mom0;
+    if(mom1) *mom1 = MET_Protocol_Data_Struct.errorsRegister.mom1;
+    if(pers0) *pers0 = MET_Protocol_Data_Struct.errorsRegister.pers0;
+    if(pers1) *pers1 = MET_Protocol_Data_Struct.errorsRegister.pers1;
+    return;
+ }
 
- /**
- * This function tests a bit field condition on a ERRORS register.
+/**
+ * This function sets a given error
+ *  
+ * Only the not null error field pointers will be updated. 
  * 
- * @param data_index index of the register data content [0:3]
- * @param mask mask value to be tested
- * @return true if the mask select a true condition
- * 
+ * @param mom0: momentary mom0 pointer
+ * @param mom1: momentary mom1 pointer
+ * @param pers0: persisten pers0 pointer
+ * @param pers1: persisten pers1 pointer
  */
-bool  MET_Can_Protocol_TestErrors(MET_CAN_ERROR_BYTE_t data_index, uint8_t mask){
-    if(data_index > 3) return false;
-
-    uint8_t data = ((uint8_t*)(&MET_Protocol_Data_Struct.errorsRegister))[data_index];
-    data &= (~mask);
-    data |= (mask);
-    if(data) return true;
-
-    return false;
-
+void  MET_Can_Protocol_SetErrors(uint8_t* mom0, uint8_t* mom1, uint8_t* pers0, uint8_t* pers1){
+    if(mom0) MET_Protocol_Data_Struct.errorsRegister.mom0 = *mom0;
+    if(mom1) MET_Protocol_Data_Struct.errorsRegister.mom1 = *mom1;
+    if(pers0) MET_Protocol_Data_Struct.errorsRegister.pers0 = *pers0;
+    if(pers1) MET_Protocol_Data_Struct.errorsRegister.pers1 = *pers1;
+    
+    return;
 }
-
+    
 
 /**
  * This function return the Data register content
@@ -434,27 +418,6 @@ bool  MET_Can_Protocol_TestParameter(uint8_t idx, uint8_t data_index, uint8_t ma
 
 }
 
-
-
-uint8_t inline MET_Can_Protocol_getCommandCode(void){
-    return MET_Protocol_Data_Struct.commandData.command;
-}
-        
-uint8_t inline MET_Can_Protocol_getCommandParam0(void){
-    return MET_Protocol_Data_Struct.commandData.param[0];
-}
-        
-uint8_t inline MET_Can_Protocol_getCommandParam1(void){
-    return MET_Protocol_Data_Struct.commandData.param[1];
-}
-
-uint8_t inline MET_Can_Protocol_getCommandParam2(void){
-    return MET_Protocol_Data_Struct.commandData.param[2];
-}
-
-uint8_t inline MET_Can_Protocol_getCommandParam3(void){
-    return MET_Protocol_Data_Struct.commandData.param[3];
-}
 
 void MET_Can_Protocol_returnCommandExecuting(void){
     MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_EXECUTING;
@@ -560,7 +523,7 @@ void MET_Can_Protocol_Loop(void){
                 break;
             
             case MET_CAN_PROTOCOL_READ_COMMAND:
-                memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Register_t));                
+                memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[2], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Command_Register_t));                
                 break;
                 
             case MET_CAN_PROTOCOL_READ_STATUS:
@@ -634,47 +597,48 @@ void MET_Can_Protocol_Loop(void){
             case MET_CAN_PROTOCOL_COMMAND_EXEC:
                 
                 // Command execution handler not assigned by the application 
-                if(MET_Protocol_Data_Struct.applicationCommandHandler == 0){                        
+                if(MET_Protocol_Data_Struct.applicationCommandHandler == 0){        
+                        MET_Protocol_Data_Struct.commandRegister.command = cmdFrame->idx;
                         MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_ERROR;
+                        MET_Protocol_Data_Struct.commandRegister.result[0] = 0;
+                        MET_Protocol_Data_Struct.commandRegister.result[1] = 0;                        
                         MET_Protocol_Data_Struct.commandRegister.error = MET_CAN_COMMAND_NOT_AVAILABLE;
-                        MET_Protocol_Data_Struct.commandRegister.result[0] = cmdFrame->idx;
-                        MET_Protocol_Data_Struct.commandRegister.result[1] = cmdFrame->seq;
-                        memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Register_t));    
+                        memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[2], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Command_Register_t));    
                         break;
                 }
                 
                 // Busy condition: command already in execution
                 if((cmdFrame->idx != MET_COMMAND_ABORT) && ( MET_Protocol_Data_Struct.commandRegister.status == MET_CAN_COMMAND_EXECUTING)){
                     // The Command Register shall not be modified in this case
-                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[3])->status = MET_CAN_COMMAND_ERROR; 
-                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[3])->error = MET_CAN_COMMAND_BUSY; // Sequence code
-                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[3])->result[0] = cmdFrame->idx; // Command code
-                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[3])->result[1] = cmdFrame->seq; // Sequence code
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[2])->command = cmdFrame->idx; // Command code
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[2])->status = MET_CAN_COMMAND_ERROR; 
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[2])->result[0] = 0; // Command code
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[2])->result[1] = 0; // Sequence code
+                    ((MET_Command_Register_t*)&MET_Can_Protocol_RxTx_Struct.tx_message[2])->error = MET_CAN_COMMAND_BUSY; // Sequence code
                     break;
                 }
+               
+                 
+                // In case of Abort request, the command code shall not be changed 
+                if(cmdFrame->idx != MET_COMMAND_ABORT) MET_Protocol_Data_Struct.commandRegister.command = cmdFrame->idx;
                 
-                // Sets the program data content for the Application command execution                                  
-                memcpy(MET_Protocol_Data_Struct.commandData.param, cmdFrame->d, 4);
-                MET_Protocol_Data_Struct.commandData.command = cmdFrame->idx;
-        
                 // Pre assign a wrong status to check if the Application returns wih a correct code
                 MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_STATUS_UNASSIGNED;
+               
+                // Pre assign the command data results               
+                MET_Protocol_Data_Struct.commandRegister.result[0] = 0;
+                MET_Protocol_Data_Struct.commandRegister.result[1] = 0; 
                 
                 // Calls the Application command handler
-                MET_Protocol_Data_Struct.applicationCommandHandler();
+                MET_Protocol_Data_Struct.applicationCommandHandler(cmdFrame->idx, cmdFrame->d[0], cmdFrame->d[1], cmdFrame->d[2], cmdFrame->d[3]);
 
                 // The Application should have assigned the correct returning code to the Command Register
                 if(MET_Protocol_Data_Struct.commandRegister.status > MET_CAN_COMMAND_ERROR){
                     MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_ERROR;
-                    MET_Protocol_Data_Struct.commandRegister.error  = MET_CAN_COMMAND_WRONG_RETURN_CODE;
-                    MET_Protocol_Data_Struct.commandRegister.result[0] = cmdFrame->idx;
-                    MET_Protocol_Data_Struct.commandRegister.result[1] = cmdFrame->seq; 
-                
-                }else if(MET_Protocol_Data_Struct.commandRegister.status == MET_CAN_COMMAND_ERROR){
-                    MET_Protocol_Data_Struct.commandRegister.result[0] = cmdFrame->idx;
-                    MET_Protocol_Data_Struct.commandRegister.result[1] = cmdFrame->seq; 
+                    MET_Protocol_Data_Struct.commandRegister.error  = MET_CAN_COMMAND_WRONG_RETURN_CODE;                
                 }
-                memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[3], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Register_t));                                    
+                
+                memcpy(&MET_Can_Protocol_RxTx_Struct.tx_message[2], &MET_Protocol_Data_Struct.commandRegister, sizeof(MET_Command_Register_t));                                    
                 break;
             
         }
