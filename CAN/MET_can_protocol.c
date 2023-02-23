@@ -30,6 +30,10 @@
 #ifndef MET_CAN_PARAM_REGISTERS
     #warning "The application shall define the MET_CAN_PARAM_REGISTERS in the application.h header file" 
     #define MET_CAN_PARAM_REGISTERS 0
+#else
+    #if MET_CAN_PARAM_REGISTERS > 254
+        #warning "The MET_CAN_PARAM_REGISTERS cannot exceed 254"
+    #endif
 #endif
 
 
@@ -394,6 +398,7 @@ uint8_t  MET_Can_Protocol_GetData(uint8_t idx, uint8_t data_index){
     return 0;
 }
 
+ 
 /**
  * This function tests a bit field condition on a Data register.
  * 
@@ -427,6 +432,32 @@ uint8_t  MET_Can_Protocol_GetParameter(uint8_t idx, uint8_t data_index){
     }    
     
     return 0;
+}
+
+/**
+ * This function sets the default value of a parameter
+ * 
+ * This function will work ONLY if the EEPROM has not yet stored
+ * with the MASTER parameter data 
+ * 
+ * @param idx index of the target parameter
+ * @param d0 data d0
+ * @param d1 data d1
+ * @param d2 data d2
+ * @param d3 data d3
+ * 
+ */
+void  MET_Can_Protocol_SetDefaultParameter(uint8_t idx, uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3){
+    
+    if (SMEE_CUSTOM_SIG == SmartEEPROM32[TEST_EEPROM_INDEX]) return;
+    if(idx >= MET_Protocol_Data_Struct.applicationParameterArrayLen) return;
+    
+    MET_Protocol_Data_Struct.pApplicationParameterArray[idx].d[0] = d0;
+    MET_Protocol_Data_Struct.pApplicationParameterArray[idx].d[1] = d1;
+    MET_Protocol_Data_Struct.pApplicationParameterArray[idx].d[2] = d2;
+    MET_Protocol_Data_Struct.pApplicationParameterArray[idx].d[3] = d3;
+    
+    return ;
 }
 
 /**

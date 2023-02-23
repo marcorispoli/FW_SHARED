@@ -407,10 +407,11 @@
         /// Returns the pointer to the Application PARAMETER register array
         ext uint8_t  MET_Can_Protocol_GetParameter(uint8_t idx, uint8_t data_index);
     
-        // The function tests the content of a PARAMETER register with a mask byte
+        /// The function tests the content of a PARAMETER register with a mask byte
         ext bool  MET_Can_Protocol_TestParameter(uint8_t idx, uint8_t data_index, uint8_t mask);
         
-        
+        /// This function shall be used to set the Default parameter value 
+        ext void  MET_Can_Protocol_SetDefaultParameter(uint8_t idx, uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3);        
 
         /// Set the COMMAND EXECUTION return code
         ext void MET_Can_Protocol_returnCommandExecuting(void);
