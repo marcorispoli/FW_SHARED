@@ -42,7 +42,7 @@
  * 
  *  @{ 
  */
-/**
+        /**
          * @brief Structure for module customization
          * 
          * This structure is filled with the initialization data 
@@ -118,6 +118,23 @@
         /// Attribute used into the CAN Rx/Tx functions
         CAN_MSG_RX_FRAME_ATTRIBUTE msgFrameAttr0 = CAN_MSG_RX_DATA_FRAME; 
         
+        /// Define a pointer to access SmartEEPROM as bytes 
+        uint8_t *SmartEEPROM8       = (uint8_t *)SEEPROM_ADDR;
+
+        /// Define a pointer to access SmartEEPROM as words (32-bits) 
+        uint32_t *SmartEEPROM32     = (uint32_t *)SEEPROM_ADDR;
+
+        /// Define the NVMCTRL_SEESBLK_MASK_BITS to extract the NVMCTRL_SEESBLK bits(35:32) from NVM User Page Mapping(0x00804000) 
+        #define NVMCTRL_SEESBLK_MASK_BITS   0x0F
+
+        /// Define the NVMCTRL_SEEPSZ_MASK_BITS to extract the NVMCTRL_SEEPSZ bits(38:36) from NVM User Page Mapping(0x00804000) 
+        #define NVMCTRL_SEEPSZ_MASK_BITS    0x07
+
+        /// EEPROM INIT WORD
+        #define SMEE_CUSTOM_SIG         0x5a5a5a5a
+
+        #define TEST_EEPROM_INDEX       255
+
     /** @}*/  // metCanHarmony
     
      /**
@@ -138,7 +155,8 @@
 
         static bool rxReceptionTrigger = false; //!< RX received frame flag
         static bool rxErrorTrigger = false;//!< TX received frame flag
-
+        
+        
     /** @}*/  // metCanLocal
 
         
@@ -183,6 +201,10 @@ void MET_Can_Protocol_Reception_Trigger(void){
 */
 void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
     
+    uint32_t    NVMCTRL_SEESBLK_FuseConfig  = ((*(uint32_t *)(USER_PAGE_ADDR + 4)) >> 0) & NVMCTRL_SEESBLK_MASK_BITS;
+    uint32_t    NVMCTRL_SEEPSZ_FuseConfig   = ((*(uint32_t *)(USER_PAGE_ADDR + 4)) >> 4) & NVMCTRL_SEEPSZ_MASK_BITS;
+    
+    
     // Assignes the current device ID
     MET_Protocol_Data_Struct.deviceID = MET_CAN_APP_DEVICE_ID;
     
@@ -212,8 +234,25 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
     // Add the external DATA register array
     MET_Protocol_Data_Struct.applicationDataArrayLen = MET_CAN_DATA_REGISTERS;
    
-    // Add the external PARAMETER register array
-    MET_Protocol_Data_Struct.applicationParameterArrayLen = MET_CAN_PARAM_REGISTERS;
+    // Add the Parameter registers here
+    if((MET_CAN_PARAM_REGISTERS) && (NVMCTRL_SEESBLK_FuseConfig == MET_EEPROM_BLK) && (NVMCTRL_SEEPSZ_FuseConfig == MET_EEPROM_PSZ)){
+        MET_Protocol_Data_Struct.applicationParameterArrayLen = MET_CAN_PARAM_REGISTERS;
+
+        // Wait the Smart Eeeprom busy condition before to proceed
+        while (NVMCTRL_SmartEEPROM_IsBusy()) ;
+        
+        // Test if the EEPROM has been initialized
+        if (SMEE_CUSTOM_SIG == SmartEEPROM32[TEST_EEPROM_INDEX])
+        {        
+            // Upload the eeprom with the stored data
+            for(int i=0; i< MET_CAN_PARAM_REGISTERS;i++) *((uint32_t*) MET_Protocol_Data_Struct.pApplicationParameterArray[i].d) = SmartEEPROM32[i];
+            
+        }else{
+            for(int i=0; i< MET_CAN_PARAM_REGISTERS;i++) memset(MET_Protocol_Data_Struct.pApplicationParameterArray[i].d,0,4);
+        }
+        
+    }else MET_Protocol_Data_Struct.applicationParameterArrayLen = 0;    
+    
     
     // Add the application command handler 
     MET_Protocol_Data_Struct.applicationCommandHandler = pCommandHandler;
@@ -294,10 +333,7 @@ uint8_t  MET_Can_Protocol_GetStatus(uint8_t idx, uint8_t data_index){
 bool  MET_Can_Protocol_TestStatus(uint8_t idx, uint8_t data_index, uint8_t mask){
     
     if((idx < MET_Protocol_Data_Struct.applicationStatusArrayLen) && (data_index < 4)) {
-        uint8_t data = MET_Protocol_Data_Struct.pApplicationStatusArray[idx].d[data_index];
-        data &= (~mask);
-        data |= (mask);
-        if(data) return true;
+        return MET_Protocol_Data_Struct.pApplicationStatusArray[idx].d[data_index] & mask;
     }
       
     return false;
@@ -370,10 +406,7 @@ uint8_t  MET_Can_Protocol_GetData(uint8_t idx, uint8_t data_index){
 bool  MET_Can_Protocol_TestData(uint8_t idx, uint8_t data_index, uint8_t mask){
     
     if((idx < MET_Protocol_Data_Struct.applicationDataArrayLen) && (data_index < 4)) {
-        uint8_t data = MET_Protocol_Data_Struct.pApplicationDataArray[idx].d[data_index];
-        data &= (~mask);
-        data |= (mask);
-        if(data) return true;
+        return MET_Protocol_Data_Struct.pApplicationDataArray[idx].d[data_index] & mask;                
     }
       
     return false;
@@ -408,10 +441,7 @@ uint8_t  MET_Can_Protocol_GetParameter(uint8_t idx, uint8_t data_index){
 bool  MET_Can_Protocol_TestParameter(uint8_t idx, uint8_t data_index, uint8_t mask){
     
     if((idx < MET_Protocol_Data_Struct.applicationParameterArrayLen) && (data_index < 4)) {
-        uint8_t data = MET_Protocol_Data_Struct.pApplicationParameterArray[idx].d[data_index];
-        data &= (~mask);
-        data |= (mask);
-        if(data) return true;
+        return MET_Protocol_Data_Struct.pApplicationParameterArray[idx].d[data_index] & mask;
     }
       
     return false;
@@ -592,8 +622,10 @@ void MET_Can_Protocol_Loop(void){
                 break;
                 
             case MET_CAN_PROTOCOL_STORE_PARAMS:
+                for(int i=0; i< MET_CAN_PARAM_REGISTERS;i++) SmartEEPROM32[i] = *((uint32_t*) MET_Protocol_Data_Struct.pApplicationParameterArray[i].d) ;    
+                SmartEEPROM32[TEST_EEPROM_INDEX] = SMEE_CUSTOM_SIG;
                 break;
-            
+
             case MET_CAN_PROTOCOL_COMMAND_EXEC:
                 
                 // Command execution handler not assigned by the application 
@@ -686,6 +718,8 @@ void MET_Can_Protocol_Reception_Callback(uintptr_t context)
     if (((status & CAN_PSR_LEC_Msk) == CAN_ERROR_NONE) || 
 	((status & CAN_PSR_LEC_Msk) == CAN_ERROR_LEC_NC))
     {
+        
+        
        // SUCCESSO
         rxReceptionTrigger = true;
         

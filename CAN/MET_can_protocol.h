@@ -45,8 +45,18 @@
  * 
  * This Module makes use of the following Processor modules:
  * - CAN0 peripheral module;
- * - Peripheral Can0 clock
- * - PIN Assignement
+ * - Peripheral Can0 clock;
+ * - PIN Assignement;
+ * - SYSTEM Memory;
+ * 
+ * ## SYSTEM Peripheral module setup
+ * 
+ * This Module makes use of the Smart EEPROM feature of the microcontroller.
+ * The module shall provides 256 32-bit word to be assigned to parameters.
+ * According with this requisite the SYSTEM peripheral module shall be set as follow:
+ * + SYSTEM/Device & Project Configuration/ATSAME51J20A Device Configuration/Fuse settings:
+ *  + Number Of Phisical NVM Blocks Composing a SmartEEPROM Sector = 1;
+ *  + Size Of SmartEEPROM Page = 1;
  * 
  * ## Pin Assignement
  * 
@@ -150,6 +160,12 @@
  *    @{
  * 
  */
+
+    
+   
+    // Definies the EEPROM size to 1024 byte
+   #define MET_EEPROM_BLK 1 
+   #define MET_EEPROM_PSZ 1
 
     /** 
      * \defgroup metCanData  Module data structures
