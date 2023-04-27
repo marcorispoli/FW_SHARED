@@ -295,11 +295,14 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
     // Add the application command handler 
     MET_Protocol_Data_Struct.applicationCommandHandler = pCommandHandler;
     
-    // Schedules the next reception interrupt
-    MET_Can_Protocol_Reception_Trigger();      
+   
          
     // Bootloader initialization
     _BOOTLOADER_SHARED_t* pBootRam = (_BOOTLOADER_SHARED_t*) _BOOTLOADER_SHARED_RAM;
+    
+    pBootRam->app_maj =  MET_CAN_APP_MAJ_REV;
+    pBootRam->app_min =  MET_CAN_APP_MIN_REV;
+    pBootRam->app_sub =  MET_CAN_APP_SUB_REV;
     
     MET_Protocol_Data_Struct.bootRam = *pBootRam;
     if(     (MET_Protocol_Data_Struct.bootRam.activation_code0 == _BOOT_ACTIVATION_CODE_PRESENCE0)&&
@@ -308,11 +311,12 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
             (MET_Protocol_Data_Struct.bootRam.activation_code3 == _BOOT_ACTIVATION_CODE_PRESENCE3)) MET_Protocol_Data_Struct.bootloader_present = true;
     else MET_Protocol_Data_Struct.bootloader_present = false;
 
-    if(MET_Protocol_Data_Struct.bootloader_present){
-       pBootRam->app_maj =  MET_CAN_APP_MAJ_REV;
-       pBootRam->app_min =  MET_CAN_APP_MIN_REV;
-       pBootRam->app_sub =  MET_CAN_APP_SUB_REV;
-    }
+    
+
+    
+     // Schedules the next reception interrupt
+    MET_Can_Protocol_Reception_Trigger();      
+    MET_Can_Bootloader_Reception_Trigger();      
     
     return ;
     
