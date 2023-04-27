@@ -78,6 +78,9 @@
                         
             MET_commandHandler_t applicationCommandHandler; //!< This is the application command handler
             
+            _BOOTLOADER_SHARED_t bootRam; //!< This is the copy of the shared Bootloader RAM
+            bool bootloader_present; //!< This is the flag that is true if a bootloader is present
+            
         } MET_Protocol_Data_t;
         
         static MET_Protocol_Data_t MET_Protocol_Data_Struct; //!< This is the internal protocol data structure
@@ -106,6 +109,9 @@
 
         } MET_Can_Protocol_RxTx_t;        
         static MET_Can_Protocol_RxTx_t MET_Can_Protocol_RxTx_Struct; //!< This is the structure handling the data transmitted and received
+        static MET_Can_Protocol_RxTx_t MET_Can_Bootloader_RxTx_Struct; //!< This is the structure handling the data transmitted and received by the bootloader
+        
+        
         
         
     /**
@@ -153,13 +159,19 @@
 
         /// Interrupt routine
         static void MET_Can_Protocol_Reception_Callback(uintptr_t context); 
+        static void MET_Can_Bootloader_Reception_Callback(uintptr_t context);
 
         /// Reception activation routine
         static void MET_Can_Protocol_Reception_Trigger(void);     
+        static void MET_Can_Bootloader_Reception_Trigger(void);     
 
         static bool rxReceptionTrigger = false; //!< RX received frame flag
         static bool rxErrorTrigger = false;//!< TX received frame flag
+        static bool rxBootloaderReceptionTrigger = false; //!< RX received frame flag
+        static bool rxBootloaderErrorTrigger = false;//!< TX received frame flag
         
+        static void MET_Can_Application_Loop(void);
+        static void MET_Can_Bootloader_Loop(void);
         
     /** @}*/  // metCanLocal
 
@@ -186,6 +198,28 @@ void MET_Can_Protocol_Reception_Trigger(void){
             MET_Can_Protocol_RxTx_Struct.rx_message,
             &MET_Can_Protocol_RxTx_Struct.rx_timestamp,
             CAN_MSG_ATTR_RX_FIFO0, &msgFrameAttr0) == false)  MET_DefaultError_Callback(MET_CAN_PROTOCOL_ERROR_RECEPTION_ACTIVATION);
+    
+    return;
+}
+
+/**
+ * @brief This function triggers the bootloader reception of a further CAN frame.
+ *  
+ * In case of an error in activating the Reception, the error  MET_CAN_PROTOCOL_ERROR_RECEPTION_ACTIVATION
+ * is signaled to the Error Handler routine.
+ *  
+ */
+void MET_Can_Bootloader_Reception_Trigger(void){
+
+    // Reception Event callback registered on the FIFO1
+    CAN0_RxCallbackRegister( MET_Can_Bootloader_Reception_Callback, 0 , CAN_MSG_ATTR_RX_FIFO1 );
+    
+    // Activate the reception buffer on the FIFO-1
+    if (CAN0_MessageReceive(&MET_Can_Bootloader_RxTx_Struct.rx_messageID,
+            &MET_Can_Bootloader_RxTx_Struct.rx_messageLength,
+            MET_Can_Bootloader_RxTx_Struct.rx_message,
+            &MET_Can_Bootloader_RxTx_Struct.rx_timestamp,
+            CAN_MSG_ATTR_RX_FIFO1, &msgFrameAttr0) == false)  MET_DefaultError_Callback(MET_CAN_PROTOCOL_ERROR_RECEPTION_ACTIVATION);
     
     return;
 }
@@ -263,6 +297,22 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
     
     // Schedules the next reception interrupt
     MET_Can_Protocol_Reception_Trigger();      
+         
+    // Bootloader initialization
+    _BOOTLOADER_SHARED_t* pBootRam = (_BOOTLOADER_SHARED_t*) _BOOTLOADER_SHARED_RAM;
+    
+    MET_Protocol_Data_Struct.bootRam = *pBootRam;
+    if(     (MET_Protocol_Data_Struct.bootRam.activation_code0 == _BOOT_ACTIVATION_CODE_PRESENCE0)&&
+            (MET_Protocol_Data_Struct.bootRam.activation_code1 == _BOOT_ACTIVATION_CODE_PRESENCE1)&&
+            (MET_Protocol_Data_Struct.bootRam.activation_code2 == _BOOT_ACTIVATION_CODE_PRESENCE2)&&
+            (MET_Protocol_Data_Struct.bootRam.activation_code3 == _BOOT_ACTIVATION_CODE_PRESENCE3)) MET_Protocol_Data_Struct.bootloader_present = true;
+    else MET_Protocol_Data_Struct.bootloader_present = false;
+
+    if(MET_Protocol_Data_Struct.bootloader_present){
+       pBootRam->app_maj =  MET_CAN_APP_MAJ_REV;
+       pBootRam->app_min =  MET_CAN_APP_MIN_REV;
+       pBootRam->app_sub =  MET_CAN_APP_SUB_REV;
+    }
     
     return ;
     
@@ -508,7 +558,10 @@ void MET_Can_Protocol_returnCommandAborted(void){
     return;
 }
 
-
+void MET_Can_Protocol_Loop(void){
+    if(rxReceptionTrigger  || rxErrorTrigger) MET_Can_Application_Loop();
+    else if (rxBootloaderReceptionTrigger  || rxBootloaderErrorTrigger) MET_Can_Bootloader_Loop();
+}
         
 /**
  * 
@@ -527,7 +580,7 @@ void MET_Can_Protocol_returnCommandAborted(void){
  * received processed frame.
  * 
  */
-void MET_Can_Protocol_Loop(void){
+void MET_Can_Application_Loop(void){
     MET_Can_Frame_t* cmdFrame;
     static uint8_t lastSequence = 0;
 
@@ -725,6 +778,61 @@ void MET_Can_Protocol_Loop(void){
     
 }   
 
+void MET_Can_Bootloader_Loop(void){
+    if(rxBootloaderReceptionTrigger){
+        rxBootloaderReceptionTrigger = false;                                  
+        
+        // Verify the Lenght: it shall be 8 byte
+        if(MET_Can_Bootloader_RxTx_Struct.rx_messageLength != 8) {
+            MET_DefaultError_Callback(MET_CAN_PROTOCOL_ERROR_INVALID_LENGHT);
+            MET_Can_Bootloader_Reception_Trigger(); // Reschedule the new data reception
+            return;
+        }
+
+        // Copy the received to the data that will be retransmitted 
+        memcpy(MET_Can_Bootloader_RxTx_Struct.tx_message, MET_Can_Bootloader_RxTx_Struct.rx_message,8);
+        
+        
+        // Identifies the Protocol command
+        switch(MET_Can_Bootloader_RxTx_Struct.rx_message[0]){
+            case BOOTLOADER_GET_INFO:
+  
+                // Bootloader presence and running status
+                if(!MET_Protocol_Data_Struct.bootloader_present){
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[1] = 0;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[2] = 0;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[3] = 0;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[4] = 0;
+                }else{ 
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[1] = 2;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[2] = MET_Protocol_Data_Struct.bootRam.boot_maj;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[3] = MET_Protocol_Data_Struct.bootRam.boot_min;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[4] = MET_Protocol_Data_Struct.bootRam.boot_sub;
+                }
+                
+                MET_Can_Bootloader_RxTx_Struct.tx_message[5] = MET_Protocol_Data_Struct.bootRam.app_maj;
+                MET_Can_Bootloader_RxTx_Struct.tx_message[6] = MET_Protocol_Data_Struct.bootRam.app_min;
+                MET_Can_Bootloader_RxTx_Struct.tx_message[7] = MET_Protocol_Data_Struct.bootRam.app_sub;
+                break;
+            
+            case BOOTLOADER_START:
+                                                                
+                break;
+        }
+    
+       
+        // Sends the buffer to the caller
+        CAN0_MessageTransmit(_CAN_ID_BOOTLOADER_ADDRESS + MET_Protocol_Data_Struct.deviceID, 8, MET_Can_Bootloader_RxTx_Struct.tx_message, CAN_MODE_NORMAL, CAN_MSG_ATTR_TX_FIFO_DATA_FRAME);  
+        MET_Can_Bootloader_Reception_Trigger(); // Reschedule the new data reception
+        
+    }else if(rxBootloaderErrorTrigger){
+        rxBootloaderErrorTrigger = false;
+        MET_Can_Bootloader_Reception_Trigger();
+    }
+
+
+    
+}   
 
 /**
  * @brief CAN Reception Interrupt Handler
@@ -779,4 +887,41 @@ void MET_DefaultError_Callback(uint8_t errEvent)
     return;
 }
 
+
+/**
+ * @brief Bootloader Interrupt Handler
+ * 
+ * This function is assigned in the MET_Can_Bootloader_Reception_Trigger() function
+ * when the bootloader reception is activated. When the interrupt is executed it needs to be 
+ * rescheduled in order to be executed again.
+ * 
+ * The function determines if the interrupt has been generated 
+ * because of an error condition or because of a correct 
+ * frame received. In both cases a given flag is set so it can be 
+ * handled into the MET_Can_Protocol_Loop() function out of the Interrupt context.
+ * 
+ * 
+ * @param context
+ */
+void MET_Can_Bootloader_Reception_Callback(uintptr_t context)
+{
+ 
+    uint32_t  status = CAN0_ErrorGet();
+
+    if (((status & CAN_PSR_LEC_Msk) == CAN_ERROR_NONE) || 
+	((status & CAN_PSR_LEC_Msk) == CAN_ERROR_LEC_NC))
+    {
+        
+        
+       // SUCCESSO
+        rxBootloaderReceptionTrigger = true;
+        
+    }    else
+    {
+        // ERROR
+        rxBootloaderErrorTrigger = true;
+        
+    }
+}
+      
 /** @}*/  // metCanLocal

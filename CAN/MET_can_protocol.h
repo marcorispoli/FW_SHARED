@@ -174,9 +174,42 @@
      *  @{
      */
         #define _CAN_ID_BASE_ADDRESS 0x200 //!< This is the base address for the communication point to point
-        #define _CAN_ID_LOADER_ADDRESS 0x100 //!< This is the base address for the Loader frames
+        #define _CAN_ID_BOOTLOADER_ADDRESS 0x100 //!< This is the base address for the Loader frames
+        #define _BOOTLOADER_SHARED_RAM 0x20000000
+        
+        #define _BOOT_ACTIVATION_CODE_PRESENCE0 0x11
+        #define _BOOT_ACTIVATION_CODE_PRESENCE1 0x82
+        #define _BOOT_ACTIVATION_CODE_PRESENCE2 0x13
+        #define _BOOT_ACTIVATION_CODE_PRESENCE3 0x84
 
 
+        typedef struct{
+            uint8_t activation_code0;
+            uint8_t activation_code1;
+            uint8_t activation_code2;
+            uint8_t activation_code3;
+            
+            uint8_t boot_maj;
+            uint8_t boot_min;
+            uint8_t boot_sub;
+            uint8_t app_maj;
+            uint8_t app_min;
+            uint8_t app_sub;
+            
+            uint8_t sp0;
+            uint8_t sp1;
+            uint8_t sp2;
+            uint8_t sp3;
+            uint8_t sp4;
+            uint8_t sp5;
+            
+        }_BOOTLOADER_SHARED_t;
+        
+        typedef enum{
+            BOOTLOADER_GET_INFO = 1,            //!< Read the bootloader and app info
+            BOOTLOADER_START,                   //!< Request to start the bootloader
+        }BOOTLOADER_FRAME_CODES;
+        
         /**
          * @brief This is the enumeration class for the Frame Command codes
          */
