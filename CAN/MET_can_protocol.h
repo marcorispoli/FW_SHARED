@@ -182,6 +182,10 @@
         #define _BOOT_ACTIVATION_CODE_PRESENCE2 0x13
         #define _BOOT_ACTIVATION_CODE_PRESENCE3 0x84
 
+        #define _BOOT_ACTIVATION_CODE_START0 0x1
+        #define _BOOT_ACTIVATION_CODE_START1 0x2
+        #define _BOOT_ACTIVATION_CODE_START2 0x3
+        #define _BOOT_ACTIVATION_CODE_START3 0x4
 
         typedef struct{
             uint8_t activation_code0;

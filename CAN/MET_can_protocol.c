@@ -78,8 +78,9 @@
                         
             MET_commandHandler_t applicationCommandHandler; //!< This is the application command handler
             
-            _BOOTLOADER_SHARED_t bootRam; //!< This is the copy of the shared Bootloader RAM
+            _BOOTLOADER_SHARED_t* pBootRam; //!< This is the pointer of the shared bootloader area
             bool bootloader_present; //!< This is the flag that is true if a bootloader is present
+            bool appreset_request; //!< This is the flag to request a soft reset to activate the loader
             
         } MET_Protocol_Data_t;
         
@@ -160,7 +161,8 @@
         /// Interrupt routine
         static void MET_Can_Protocol_Reception_Callback(uintptr_t context); 
         static void MET_Can_Bootloader_Reception_Callback(uintptr_t context);
-
+        static void MET_Can_AppRestartCallback(uintptr_t context);
+        
         /// Reception activation routine
         static void MET_Can_Protocol_Reception_Trigger(void);     
         static void MET_Can_Bootloader_Reception_Trigger(void);     
@@ -295,24 +297,24 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
     // Add the application command handler 
     MET_Protocol_Data_Struct.applicationCommandHandler = pCommandHandler;
     
-   
-         
-    // Bootloader initialization
+   // Bootloader initialization
     _BOOTLOADER_SHARED_t* pBootRam = (_BOOTLOADER_SHARED_t*) _BOOTLOADER_SHARED_RAM;
+    MET_Protocol_Data_Struct.pBootRam = pBootRam;
     
-    pBootRam->app_maj =  MET_CAN_APP_MAJ_REV;
-    pBootRam->app_min =  MET_CAN_APP_MIN_REV;
-    pBootRam->app_sub =  MET_CAN_APP_SUB_REV;
-    
-    MET_Protocol_Data_Struct.bootRam = *pBootRam;
-    if(     (MET_Protocol_Data_Struct.bootRam.activation_code0 == _BOOT_ACTIVATION_CODE_PRESENCE0)&&
-            (MET_Protocol_Data_Struct.bootRam.activation_code1 == _BOOT_ACTIVATION_CODE_PRESENCE1)&&
-            (MET_Protocol_Data_Struct.bootRam.activation_code2 == _BOOT_ACTIVATION_CODE_PRESENCE2)&&
-            (MET_Protocol_Data_Struct.bootRam.activation_code3 == _BOOT_ACTIVATION_CODE_PRESENCE3)) MET_Protocol_Data_Struct.bootloader_present = true;
+    // Check the presence of the bootloader sector
+    if(     (pBootRam->activation_code0 == _BOOT_ACTIVATION_CODE_PRESENCE0)&&
+            (pBootRam->activation_code1 == _BOOT_ACTIVATION_CODE_PRESENCE1)&&
+            (pBootRam->activation_code2 == _BOOT_ACTIVATION_CODE_PRESENCE2)&&
+            (pBootRam->activation_code3 == _BOOT_ACTIVATION_CODE_PRESENCE3)) MET_Protocol_Data_Struct.bootloader_present = true;
     else MET_Protocol_Data_Struct.bootloader_present = false;
 
-    
-
+    // If the bootloader sector is not present, the shared area segment is not present as well
+    if(MET_Protocol_Data_Struct.bootloader_present){
+        pBootRam->app_maj =  MET_CAN_APP_MAJ_REV;
+        pBootRam->app_min =  MET_CAN_APP_MIN_REV;
+        pBootRam->app_sub =  MET_CAN_APP_SUB_REV;
+    }
+    MET_Protocol_Data_Struct.appreset_request = false;
     
      // Schedules the next reception interrupt
     MET_Can_Protocol_Reception_Trigger();      
@@ -778,7 +780,7 @@ void MET_Can_Application_Loop(void){
         MET_Can_Protocol_Reception_Trigger();
     }
 
-    // Rescedule the reception for a next frame
+    
     
 }   
 
@@ -809,22 +811,28 @@ void MET_Can_Bootloader_Loop(void){
                     MET_Can_Bootloader_RxTx_Struct.tx_message[4] = 0;
                 }else{ 
                     MET_Can_Bootloader_RxTx_Struct.tx_message[1] = 2;
-                    MET_Can_Bootloader_RxTx_Struct.tx_message[2] = MET_Protocol_Data_Struct.bootRam.boot_maj;
-                    MET_Can_Bootloader_RxTx_Struct.tx_message[3] = MET_Protocol_Data_Struct.bootRam.boot_min;
-                    MET_Can_Bootloader_RxTx_Struct.tx_message[4] = MET_Protocol_Data_Struct.bootRam.boot_sub;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[2] = MET_Protocol_Data_Struct.pBootRam->boot_maj;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[3] = MET_Protocol_Data_Struct.pBootRam->boot_min;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[4] = MET_Protocol_Data_Struct.pBootRam->boot_sub;
                 }
                 
-                MET_Can_Bootloader_RxTx_Struct.tx_message[5] = MET_Protocol_Data_Struct.bootRam.app_maj;
-                MET_Can_Bootloader_RxTx_Struct.tx_message[6] = MET_Protocol_Data_Struct.bootRam.app_min;
-                MET_Can_Bootloader_RxTx_Struct.tx_message[7] = MET_Protocol_Data_Struct.bootRam.app_sub;
+                MET_Can_Bootloader_RxTx_Struct.tx_message[5] = MET_Protocol_Data_Struct.revisionRegister.maj;
+                MET_Can_Bootloader_RxTx_Struct.tx_message[6] = MET_Protocol_Data_Struct.revisionRegister.min;
+                MET_Can_Bootloader_RxTx_Struct.tx_message[7] = MET_Protocol_Data_Struct.revisionRegister.sub;
                 break;
             
             case BOOTLOADER_START:
-                                                                
+                if(!MET_Protocol_Data_Struct.bootloader_present){
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[0] = 0xFF;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[1] = BOOTLOADER_START;
+                    MET_Can_Bootloader_RxTx_Struct.tx_message[2] = 0; // Bootloader not present                    
+                } else{
+                    MET_Protocol_Data_Struct.appreset_request = true;                    
+                    CAN0_TxCallbackRegister(MET_Can_AppRestartCallback, 0);
+                }                                    
                 break;
         }
     
-       
         // Sends the buffer to the caller
         CAN0_MessageTransmit(_CAN_ID_BOOTLOADER_ADDRESS + MET_Protocol_Data_Struct.deviceID, 8, MET_Can_Bootloader_RxTx_Struct.tx_message, CAN_MODE_NORMAL, CAN_MSG_ATTR_TX_FIFO_DATA_FRAME);  
         MET_Can_Bootloader_Reception_Trigger(); // Reschedule the new data reception
@@ -927,5 +935,16 @@ void MET_Can_Bootloader_Reception_Callback(uintptr_t context)
         
     }
 }
-      
+
+void MET_Can_AppRestartCallback(uintptr_t contextHandle){
+    if( !MET_Protocol_Data_Struct.appreset_request) return;
+    
+    MET_Protocol_Data_Struct.appreset_request = false;
+    MET_Protocol_Data_Struct.pBootRam->activation_code0 = _BOOT_ACTIVATION_CODE_START0;
+    MET_Protocol_Data_Struct.pBootRam->activation_code1 = _BOOT_ACTIVATION_CODE_START1;
+    MET_Protocol_Data_Struct.pBootRam->activation_code2 = _BOOT_ACTIVATION_CODE_START2;
+    MET_Protocol_Data_Struct.pBootRam->activation_code3 = _BOOT_ACTIVATION_CODE_START3;
+    NVIC_SystemReset();
+    return;
+}
 /** @}*/  // metCanLocal
