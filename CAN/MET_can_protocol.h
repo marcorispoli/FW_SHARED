@@ -37,9 +37,10 @@
  * - Standard (not Flexible) communication;
  * - Standard frame (11 bit ID);
  * - Baude Rate: 1Mb/s;
- * - Can ID reception address: 0x200 + deviceID;
+ * - Application Can ID reception address: 0x140 + deviceID;
+ * - Bootloader Can ID reception address: 0x100 + deviceID;
  * 
- * The deviceID is a decimal value from 1 to 255.
+ * The deviceID is a decimal value from 1 to 0x3F.
  * 
  * # Harmony 3 Configurator Settings
  * 
@@ -95,8 +96,8 @@
  *  + Number Of STandard Filters: 1
  *  + Standard Filter 1
  *      + Type: Range;
- *      + ID1: 0x200 + Device ID
- *      + ID12: 0x200 + Device ID
+ *      + ID1: 0x140 + Device ID (Application) 
+ *      + ID2: 0x100 + Device ID (Bootloader)
  *      + Element Configuration: Store in RX FIFO 0
  *  + Standard message No-Match disposion: Reject
  *  + Reject Standard Remote Frames: YES
@@ -173,7 +174,7 @@
      * This section implements the data structures of the module
      *  @{
      */
-        #define _CAN_ID_BASE_ADDRESS 0x200 //!< This is the base address for the communication point to point
+        #define _CAN_ID_BASE_ADDRESS 0x140 //!< This is the base address for the communication point to point
         #define _CAN_ID_BOOTLOADER_ADDRESS 0x100 //!< This is the base address for the Loader frames
         #define _BOOTLOADER_SHARED_RAM 0x20000000
         
