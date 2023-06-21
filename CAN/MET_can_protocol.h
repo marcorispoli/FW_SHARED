@@ -99,10 +99,10 @@
  *      + ID1: 0x140 + Device ID (Application) 
  *      + ID2: 0x100 + Device ID (Bootloader)
  *      + Element Configuration: Store in RX FIFO 0
- *  + Standard message No-Match disposion: Reject
+ *  + Standard message No-Match disposition: Reject
  *  + Reject Standard Remote Frames: YES
  *  + Timestamp Enable: YES 
- * 
+ *
  *  # Application Usage
  * 
  *  The Application shall mandatory define a header file application.h
@@ -119,9 +119,9 @@
  *  + #define MET_CAN_PARAM_REGISTERS :  Defines the total number of implemented PARAMETER registers 
  *
  *  The Application shall define a Callback routine to handle the Protocol Commands:
- *  + void ApplicationHandler(void): this functon shall be passed as parameter to the MET_Can_Protocol_Init();
+ *  + void ApplicationHandler(void): this function shall be passed as parameter to the MET_Can_Protocol_Init();
  * 
- *  The Applicaiton shall call the following routines to activate the communication:
+ *  The Application shall call the following routines to activate the communication:
  *  + MET_Can_Protocol_Init() function in the Setup section of the main.c file;
  *  + MET_Can_Protocol_Loop() function in the main.c Loop;
  *   
