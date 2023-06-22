@@ -3,39 +3,6 @@
 #include "application.h"                // SYS function prototypes
 #include "MET_can_protocol.h" 
 
-#ifndef MET_CAN_APP_DEVICE_ID
-    #warning "The application shall define the MET_CAN_APP_DEVICE_ID in the application.h header file" 
-    #define MET_CAN_APP_DEVICE_ID 0
-#endif
-#ifndef MET_CAN_APP_MAJ_REV
-    #warning "The application shall define the MET_CAN_APP_MAJ_REV in the application.h header file" 
-    #define MET_CAN_APP_MAJ_REV 0
-#endif
-#ifndef MET_CAN_APP_MIN_REV
-    #warning "The application shall define the MET_CAN_APP_MIN_REV in the application.h header file" 
-    #define MET_CAN_APP_MIN_REV 0
-#endif
-#ifndef MET_CAN_APP_SUB_REV
-    #warning "The application shall define the MET_CAN_APP_SUB_REV in the application.h header file" 
-    #define MET_CAN_APP_SUB_REV 0
-#endif
-#ifndef MET_CAN_STATUS_REGISTERS
-    #warning "The application shall define the MET_CAN_STATUS_REGISTERS in the application.h header file"
-    #define MET_CAN_STATUS_REGISTERS 0
-#endif
-#ifndef MET_CAN_DATA_REGISTERS
-    #warning "The application shall define the MET_CAN_DATA_REGISTERS in the application.h header file" 
-    #define MET_CAN_DATA_REGISTERS 0
-#endif
-#ifndef MET_CAN_PARAM_REGISTERS
-    #warning "The application shall define the MET_CAN_PARAM_REGISTERS in the application.h header file" 
-    #define MET_CAN_PARAM_REGISTERS 0
-#else
-    #if MET_CAN_PARAM_REGISTERS > 254
-        #warning "The MET_CAN_PARAM_REGISTERS cannot exceed 254"
-    #endif
-#endif
-
 
 /**
  * \defgroup metCanImplementation Implementation module
@@ -67,13 +34,13 @@
             MET_Errors_Register_t       errorsRegister;          //!< Errors register
             MET_Command_Register_t      commandRegister;         //!< Command Execution  register
                         
-            MET_Register_t  pApplicationStatusArray[MET_CAN_STATUS_REGISTERS]; //!< This is the Application Status Register array pointer
+            MET_Register_t  pApplicationStatusArray[MAX_STATUS_REG]; //!< This is the Application Status Register array pointer
             uint8_t     applicationStatusArrayLen; //!< This is the Application Status Register array lenght
 
-            MET_Register_t   pApplicationDataArray[MET_CAN_DATA_REGISTERS]; //!< This is the Application DATA Register array pointer
+            MET_Register_t   pApplicationDataArray[MAX_DATA_REG]; //!< This is the Application DATA Register array pointer
             uint8_t     applicationDataArrayLen; //!< This is the Application DATA Register array lenght
 
-            MET_Register_t   pApplicationParameterArray[MET_CAN_PARAM_REGISTERS]; //!< This is the Application PARAMETER Register array pointer
+            MET_Register_t   pApplicationParameterArray[MAX_PARAM_REG]; //!< This is the Application PARAMETER Register array pointer
             uint8_t     applicationParameterArrayLen; //!< This is the Application PARAMETER Register array lenght
                         
             MET_commandHandler_t applicationCommandHandler; //!< This is the application command handler
@@ -91,7 +58,7 @@
          * 
          * This structure is internally used to handle the communication 
          * data frames. The structure is local and is not shared with the 
-         * application. The Received data are stroeed into the rx_message[]
+         * application. The Received data are stored into the rx_message[]
          * array as soon as the data is received into the FIFO. 
          * The tx_message[] array is passed to the Can Sender function 
          * when a frame shall be sent.
@@ -112,8 +79,7 @@
         static MET_Can_Protocol_RxTx_t MET_Can_Protocol_RxTx_Struct; //!< This is the structure handling the data transmitted and received
         static MET_Can_Protocol_RxTx_t MET_Can_Bootloader_RxTx_Struct; //!< This is the structure handling the data transmitted and received by the bootloader
         
-        
-        
+      
         
     /**
      * \defgroup metCanHarmony Harmony 3 necessary declarations
@@ -226,35 +192,37 @@ void MET_Can_Bootloader_Reception_Trigger(void){
     return;
 }
 
+
 /**
-* 
-* This function shall be called by the Application Implementing Protocol
-* at the beginning of the program, in order to set the registers structure
-* and to start the reception.
-* 
-*  
-* @param deviceID this is the assigned deviceID (1:255)
-* 
-* @param pCommandHandler application command handler
-* 
-* 
-*/
-void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
+ * This function shall be called by the Application Implementing Protocol
+ * at the beginning of the program, in order to set the registers structure
+ * and to start the reception.
+ * 
+ * @param devId This is the device Id in the range 0x1:0x3F
+ * @param statReg Number of implemented Status Registers
+ * @param dataReg Number of implemented Data Registers
+ * @param paramReg Number of implemented Data Registers
+ * @param appMaj Application Major revision code
+ * @param appMin Application Minor revision code
+ * @param appSub Application Sub revision code
+ * @param pCommandHandler Pointer to the Command callback handler
+ */
+void MET_Can_Protocol_Init(uint8_t devId, uint8_t statReg, uint8_t dataReg, uint8_t paramReg, uint8_t appMaj, uint8_t appMin, uint8_t appSub, MET_commandHandler_t pCommandHandler){
     
     uint32_t    NVMCTRL_SEESBLK_FuseConfig  = ((*(uint32_t *)(USER_PAGE_ADDR + 4)) >> 0) & NVMCTRL_SEESBLK_MASK_BITS;
     uint32_t    NVMCTRL_SEEPSZ_FuseConfig   = ((*(uint32_t *)(USER_PAGE_ADDR + 4)) >> 4) & NVMCTRL_SEEPSZ_MASK_BITS;
     
     
     // Assignes the current device ID
-    MET_Protocol_Data_Struct.deviceID = MET_CAN_APP_DEVICE_ID;
+    MET_Protocol_Data_Struct.deviceID = devId;
     
     // Harmony 3 library call: Init memory of the CAN Bus module
     CAN0_MessageRAMConfigSet(Can0MessageRAM);
     
     // Assignes the Application Revision code to the revision register
-    MET_Protocol_Data_Struct.revisionRegister.maj = MET_CAN_APP_MAJ_REV;
-    MET_Protocol_Data_Struct.revisionRegister.min = MET_CAN_APP_MIN_REV;
-    MET_Protocol_Data_Struct.revisionRegister.sub = MET_CAN_APP_SUB_REV;
+    MET_Protocol_Data_Struct.revisionRegister.maj = appMaj;
+    MET_Protocol_Data_Struct.revisionRegister.min = appMin;
+    MET_Protocol_Data_Struct.revisionRegister.sub = appSub;
     
     // Clears the Command register 
     MET_Protocol_Data_Struct.commandRegister.status = MET_CAN_COMMAND_EXECUTED;
@@ -269,14 +237,14 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
     MET_Protocol_Data_Struct.errorsRegister.pers1=0;
     
     // Add the external STATUS register array 
-    MET_Protocol_Data_Struct.applicationStatusArrayLen = MET_CAN_STATUS_REGISTERS;
+    MET_Protocol_Data_Struct.applicationStatusArrayLen = statReg;
     
     // Add the external DATA register array
-    MET_Protocol_Data_Struct.applicationDataArrayLen = MET_CAN_DATA_REGISTERS;
+    MET_Protocol_Data_Struct.applicationDataArrayLen = dataReg;
    
     // Add the Parameter registers here
-    if((MET_CAN_PARAM_REGISTERS) && (NVMCTRL_SEESBLK_FuseConfig == MET_EEPROM_BLK) && (NVMCTRL_SEEPSZ_FuseConfig == MET_EEPROM_PSZ)){
-        MET_Protocol_Data_Struct.applicationParameterArrayLen = MET_CAN_PARAM_REGISTERS;
+    if((paramReg) && (NVMCTRL_SEESBLK_FuseConfig == MET_EEPROM_BLK) && (NVMCTRL_SEEPSZ_FuseConfig == MET_EEPROM_PSZ)){
+        MET_Protocol_Data_Struct.applicationParameterArrayLen = paramReg;
 
         // Wait the Smart Eeeprom busy condition before to proceed
         while (NVMCTRL_SmartEEPROM_IsBusy()) ;
@@ -285,10 +253,10 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
         if (SMEE_CUSTOM_SIG == SmartEEPROM32[TEST_EEPROM_INDEX])
         {        
             // Upload the eeprom with the stored data
-            for(int i=0; i< MET_CAN_PARAM_REGISTERS;i++) *((uint32_t*) MET_Protocol_Data_Struct.pApplicationParameterArray[i].d) = SmartEEPROM32[i];
+            for(int i=0; i< paramReg;i++) *((uint32_t*) MET_Protocol_Data_Struct.pApplicationParameterArray[i].d) = SmartEEPROM32[i];
             
         }else{
-            for(int i=0; i< MET_CAN_PARAM_REGISTERS;i++) memset(MET_Protocol_Data_Struct.pApplicationParameterArray[i].d,0,4);
+            for(int i=0; i< paramReg;i++) memset(MET_Protocol_Data_Struct.pApplicationParameterArray[i].d,0,4);
         }
         
     }else MET_Protocol_Data_Struct.applicationParameterArrayLen = 0;    
@@ -310,9 +278,9 @@ void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler){
 
     // If the bootloader sector is not present, the shared area segment is not present as well
     if(MET_Protocol_Data_Struct.bootloader_present){
-        pBootRam->app_maj =  MET_CAN_APP_MAJ_REV;
-        pBootRam->app_min =  MET_CAN_APP_MIN_REV;
-        pBootRam->app_sub =  MET_CAN_APP_SUB_REV;
+        pBootRam->app_maj =  appMaj;
+        pBootRam->app_min =  appMin;
+        pBootRam->app_sub =  appSub;
     }
     MET_Protocol_Data_Struct.appreset_request = false;
     
@@ -712,7 +680,7 @@ void MET_Can_Application_Loop(void){
                 break;
                 
             case MET_CAN_PROTOCOL_STORE_PARAMS:
-                for(int i=0; i< MET_CAN_PARAM_REGISTERS;i++) SmartEEPROM32[i] = *((uint32_t*) MET_Protocol_Data_Struct.pApplicationParameterArray[i].d) ;    
+                for(int i=0; i< MET_Protocol_Data_Struct.applicationParameterArrayLen;i++) SmartEEPROM32[i] = *((uint32_t*) MET_Protocol_Data_Struct.pApplicationParameterArray[i].d) ;    
                 SmartEEPROM32[TEST_EEPROM_INDEX] = SMEE_CUSTOM_SIG;
                 break;
 

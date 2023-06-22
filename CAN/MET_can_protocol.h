@@ -25,7 +25,7 @@
  *
  * This module implements the engine communication functionalities 
  * of the Z190 Device Communication protocol specifications in the 
- * CAN CHannel 0.
+ * CAN Channel 0.
  * 
  * 
  * 
@@ -53,11 +53,18 @@
  * ## SYSTEM Peripheral module setup
  * 
  * This Module makes use of the Smart EEPROM feature of the microcontroller.
+ * 
  * The module shall provides 256 32-bit word to be assigned to parameters.
+ * 
  * According with this requisite the SYSTEM peripheral module shall be set as follow:
- * + SYSTEM/Device & Project Configuration/ATSAME51J20A Device Configuration/Fuse settings:
- *  + Number Of Phisical NVM Blocks Composing a SmartEEPROM Sector = 1;
- *  + Size Of SmartEEPROM Page = 1;
+ * ```text
+ * 
+ * Device & Project Configuration
+ *      - ATSAME51J20A Device Configuration/Fuse settings:
+ *              - Number Of Phisical NVM Blocks Composing a SmartEEPROM Sector = 1;
+ *              - Size Of SmartEEPROM Page = 1;
+ * 
+ * ```
  * 
  * ## Pin Assignement
  * 
@@ -71,10 +78,9 @@
  *   + Set the divisor to 2 to obtain a final 24MHz of GLK4 Clock;
  *   + The CAN0 Peripheral clock shall be configured with the GLK4 clock at 24 MHz.
  * 
- * ## CAN0 peripheral module
+ * ## CAN0 configuration
  * 
- * Follows only those settings that shall be activated.
- * What is not reported is disabled or not modified.
+ * ```text
  * 
  * + CAN Operational Mode = NORMAL;
  * + Interrupt Mode: Yes;
@@ -87,43 +93,41 @@
  *   + RX FIFO 0 Setting
  *      + Number of element: 1
  * 
- * + Use TX FIFO: Yes
- *   + TX FIFO Setting
+ * + Use RX FIFO 1: Yes
+ *   + RX FIFO 1 Setting
  *      + Number of element: 1
- *
- * + EnableTX Pause: YES
+ * 
  * + Standard Filters 
- *  + Number Of STandard Filters: 1
+ *  + Number Of STandard Filters: 2
+ * 
  *  + Standard Filter 1
  *      + Type: Range;
- *      + ID1: 0x140 + Device ID (Application) 
- *      + ID2: 0x100 + Device ID (Bootloader)
+ *      + ID1: 0x140 + Device ID 
+ *      + ID2: 0x140 + Device ID 
  *      + Element Configuration: Store in RX FIFO 0
- *  + Standard message No-Match disposition: Reject
+ * 
+ *  + Standard Filter 2
+ *      + Type: Range;
+ *      + ID1: 0x100 + Device ID  
+ *      + ID2: 0x100 + Device ID 
+ *      + Element Configuration: Store in RX FIFO 1
+ * 
  *  + Reject Standard Remote Frames: YES
+ * 
  *  + Timestamp Enable: YES 
+ * 
+ * ```
  *
  *  # Application Usage
  * 
- *  The Application shall mandatory define a header file application.h
- *  that shall be stored into the same directory of the main.c file.
- *  
- *  The application.h shall contain the following defines:
+ *  The Application shall define the structure of the Protocol registers:
+ * + shall define the number of STATUS registers;
+ * + shall define the number of DATA registers;
+ * + shall define the number of PARAMETER registers;
+ * + Shall instantiate the Command callback function;
  * 
- *  + #define MET_CAN_APP_MAJ_REV : Revision Major Number
- *  + #define MET_CAN_APP_MIN_REV : Revision Minor Number
- *  + #define MET_CAN_APP_SUB_REV : Revision build Number
- *  + #define MET_CAN_APP_DEVICE_ID : Application DEVICE CAN Id address
- *  + #define MET_CAN_STATUS_REGISTERS : Defines the total number of implemented STATUS registers 
- *  + #define MET_CAN_DATA_REGISTERS : Defines the total number of implemented Application DATA registers 
- *  + #define MET_CAN_PARAM_REGISTERS :  Defines the total number of implemented PARAMETER registers 
- *
- *  The Application shall define a Callback routine to handle the Protocol Commands:
- *  + void ApplicationHandler(void): this function shall be passed as parameter to the MET_Can_Protocol_Init();
- * 
- *  The Application shall call the following routines to activate the communication:
- *  + MET_Can_Protocol_Init() function in the Setup section of the main.c file;
- *  + MET_Can_Protocol_Loop() function in the main.c Loop;
+ * + The Application initializes the module with the MET_Can_Protocol_Init() function;
+ * + The Application shall call the MET_Can_Protocol_Loop() function in the main loop;
  *   
  *  The Application shall use the following routines to handle with the Registers:
  * 
@@ -162,54 +166,47 @@
  * 
  */
 
-    
-   
-    // Definies the EEPROM size to 1024 byte
-   #define MET_EEPROM_BLK 1 
-   #define MET_EEPROM_PSZ 1
-
     /** 
-     * \defgroup metCanData  Module data structures
+     * \defgroup metCanConstants  Module Constants  definition
      * 
      * This section implements the data structures of the module
      *  @{
      */
+        // Defines the EEPROM size to 1024 byte
+        #define MET_EEPROM_BLK  1 //!< NUMBER OF SMART EEPROM BLOCKS 
+        #define MET_EEPROM_PSZ  1 //!< SIZE OF SMART EEPROM BLOCK 
+
+        #define MAX_STATUS_REG      200 //!< MAX NUMBER OF STATUS REGISTERS
+        #define MAX_DATA_REG        200 //!< MAX NUMBER OF DATA REGISTERS
+        #define MAX_PARAM_REG       200 //!< MAX NUMBER OF PARAM REGISTERS
+
         #define _CAN_ID_BASE_ADDRESS 0x140 //!< This is the base address for the communication point to point
         #define _CAN_ID_BOOTLOADER_ADDRESS 0x100 //!< This is the base address for the Loader frames
-        #define _BOOTLOADER_SHARED_RAM 0x20000000
-        
-        #define _BOOT_ACTIVATION_CODE_PRESENCE0 0x11
-        #define _BOOT_ACTIVATION_CODE_PRESENCE1 0x82
-        #define _BOOT_ACTIVATION_CODE_PRESENCE2 0x13
-        #define _BOOT_ACTIVATION_CODE_PRESENCE3 0x84
+        #define _BOOTLOADER_SHARED_RAM   0x20000000 //!< RAM shared start address
 
-        #define _BOOT_ACTIVATION_CODE_START0 0x1
-        #define _BOOT_ACTIVATION_CODE_START1 0x2
-        #define _BOOT_ACTIVATION_CODE_START2 0x3
-        #define _BOOT_ACTIVATION_CODE_START3 0x4
 
-        typedef struct{
-            uint8_t activation_code0;
-            uint8_t activation_code1;
-            uint8_t activation_code2;
-            uint8_t activation_code3;
-            
-            uint8_t boot_maj;
-            uint8_t boot_min;
-            uint8_t boot_sub;
-            uint8_t app_maj;
-            uint8_t app_min;
-            uint8_t app_sub;
-            
-            uint8_t sp0;
-            uint8_t sp1;
-            uint8_t sp2;
-            uint8_t sp3;
-            uint8_t sp4;
-            uint8_t sp5;
-            
-        }_BOOTLOADER_SHARED_t;
-        
+        #define _BOOT_ACTIVATION_CODE_PRESENCE0  0x11 //!< Code 0 Bootloader presence
+        #define _BOOT_ACTIVATION_CODE_PRESENCE1  0x82 //!< Code 1 Bootloader presence
+        #define _BOOT_ACTIVATION_CODE_PRESENCE2  0x13 //!< Code 2 Bootloader presence
+        #define _BOOT_ACTIVATION_CODE_PRESENCE3  0x84 //!< Code 3 Bootloader presence
+
+        #define _BOOT_ACTIVATION_CODE_START0  0x1 //!< Code 0 Bootloader start
+        #define _BOOT_ACTIVATION_CODE_START1  0x2 //!< Code 1 Bootloader start
+        #define _BOOT_ACTIVATION_CODE_START2  0x3 //!< Code 2 Bootloader start
+        #define _BOOT_ACTIVATION_CODE_START3  0x4 //!< Code 3 Bootloader start
+
+        #define MET_COMMAND_ABORT 0 //!< This is the reserved command code for the ABORT command
+
+    /** @}*/  // metCanConstants
+
+    /** 
+     * \defgroup metCanEnumeration  Module Enumeration types
+     * 
+     * This section describes the Module enumeration type definitions
+     *  @{
+     */
+
+        /// Bootloader Command enumeration
         typedef enum{
             BOOTLOADER_GET_INFO = 1,            //!< Read the bootloader and app info
             BOOTLOADER_START,                   //!< Request to start the bootloader
@@ -231,7 +228,7 @@
             MET_CAN_PROTOCOL_COMMAND_EXEC       //!< Command Execution frame
         }MET_FRAME_CODES;
         
-        /** 
+         /** 
          * @brief Can Protocol Error codes
          * 
          * Those errors are generated into the module in case
@@ -248,6 +245,76 @@
             MET_CAN_PROTOCOL_ERROR_INVALID_LENGHT, //!> Frame with invalid Lenght
 
         } MET_CAN_PROTOCOL_ERROR_DEFS;
+        
+         /**
+         * @brief This is the Command Error enumeration
+         */
+        typedef enum{
+            MET_CAN_COMMAND_NO_ERROR = 0,       //!< No Error 
+            MET_CAN_COMMAND_BUSY = 1,           //!< A command is executing
+            MET_CAN_COMMAND_INVALID_DATA = 2,   //!< The Command data are invalid
+            MET_CAN_COMMAND_NOT_ENABLED = 3,    //!< The Command cannot be momentary executed 
+            MET_CAN_COMMAND_NOT_AVAILABLE = 4,  //!< The Command cannot be executed in this revision      
+            MET_CAN_COMMAND_WRONG_RETURN_CODE = 5,  //!< The Command returned a non valid status code
+            MET_CAN_COMMAND_ABORT_CODE = 6,         //!< The Command has been Aborted
+            MET_CAN_COMMAND_APPLICATION_ERRORS  //!< Starting code for applicaiton specific errors                    
+        }MET_CommandErrors_t;
+        
+          /**
+         * @brief This type defines the possible Command Execution status
+         * 
+         */
+        typedef enum{
+            MET_CAN_COMMAND_EXECUTING = 1,       //!< The Command is processing
+            MET_CAN_COMMAND_EXECUTED,            //!< The Command has been processed successfully
+            MET_CAN_COMMAND_ERROR,               //!< The Command has been terminated with error condition
+            MET_CAN_COMMAND_STATUS_UNASSIGNED,   //!< The Application forgot to assign a correct return code
+        }MET_CommandExecStatus_t;
+        
+        /**
+        * This is the enumeration to access the content of the ERRORS register
+        */
+       typedef enum{
+            MET_CAN_ERROR_MOM0 = 0, //!< byte index of the Momentary error 0
+            MET_CAN_ERROR_MOM1,     //!< byte index of the Momentary error 1
+            MET_CAN_ERROR_PERSISTENT0, //!< byte index of the Persisten error 0
+            MET_CAN_ERROR_PERSISTENT1, //!< byte index of the Persisten error 1
+        }MET_CAN_ERROR_BYTE_t;
+        
+    /** @}*/  // metCanEnumeration
+
+    /** 
+     * \defgroup metCanData  Module data structures
+     * 
+     * This section implements the data structures of the module
+     *  @{
+     */
+
+        /**
+         * This is the structure of the Shared ram area
+         */
+        typedef struct{
+            uint8_t activation_code0; //!< Activation code byte 0
+            uint8_t activation_code1; //!< Activation code byte 1
+            uint8_t activation_code2; //!< Activation code byte 2
+            uint8_t activation_code3; //!< Activation code byte 3
+
+            uint8_t boot_maj;   //!< Bootloader Major revision code
+            uint8_t boot_min;   //!< Bootloader Minor revision code
+            uint8_t boot_sub;   //!< Bootloader Sub revision code
+            uint8_t app_maj;    //!< Application Major revision code
+            uint8_t app_min;    //!< Application Mino revision code
+            uint8_t app_sub;    //!< Application Sub revision code
+
+            uint8_t sp0;
+            uint8_t sp1;
+            uint8_t sp2;
+            uint8_t sp3;
+            uint8_t sp4;
+            uint8_t sp5;
+
+        }_BOOTLOADER_SHARED_t;
+        
 
         /**
          * This is the Protocol frame data content
@@ -268,34 +335,7 @@
             uint8_t d[4]; //!< Register data content
         }MET_Register_t;
         
-        #define MET_COMMAND_ABORT 0 //!< This is the reserved command code for the ABORT command
-
-        /**
-         * @brief This is the Command Error eenumeration
-         */
-        typedef enum{
-            MET_CAN_COMMAND_NO_ERROR = 0,       //!< No Error 
-            MET_CAN_COMMAND_BUSY = 1,           //!< A command is executing
-            MET_CAN_COMMAND_INVALID_DATA = 2,   //!< The Command data are invalid
-            MET_CAN_COMMAND_NOT_ENABLED = 3,    //!< The Command cannot be momentary executed 
-            MET_CAN_COMMAND_NOT_AVAILABLE = 4,  //!< The Command cannot be executed in this revision      
-            MET_CAN_COMMAND_WRONG_RETURN_CODE = 5,  //!< The Command returned a non valid status code
-            MET_CAN_COMMAND_ABORT_CODE = 6,         //!< The Command has been Aborted
-            MET_CAN_COMMAND_APPLICATION_ERRORS  //!< Starting code for applicaiton specific errors                    
-        }MET_CommandErrors_t;
         
-        /**
-         * @brief This type defines the possible Command Execution status
-         * 
-         */
-        typedef enum{
-            MET_CAN_COMMAND_EXECUTING = 1,       //!< The Command is processing
-            MET_CAN_COMMAND_EXECUTED,            //!< The Command has been processed successfully
-            MET_CAN_COMMAND_ERROR,               //!< The Command has been terminated with error condition
-            MET_CAN_COMMAND_STATUS_UNASSIGNED,   //!< The Application forgot to assign a correct return code
-        }MET_CommandExecStatus_t;
-        
-       
        
         /**
          * @brief This is the type definition for the Command callback function
@@ -370,15 +410,6 @@
        }MET_Command_Register_t;
            
        
-       /**
-        * This is the enumeration to access the content of the ERRORS register
-        */
-       typedef enum{
-            MET_CAN_ERROR_MOM0 = 0, //!< byte index of the Momentary error 0
-            MET_CAN_ERROR_MOM1,     //!< byte index of the Momentary error 1
-            MET_CAN_ERROR_PERSISTENT0, //!< byte index of the Persisten error 0
-            MET_CAN_ERROR_PERSISTENT1, //!< byte index of the Persisten error 1
-        }MET_CAN_ERROR_BYTE_t;
             
     /** @}*/  // metCanData
 
@@ -402,10 +433,11 @@
      */
         
         /// Can protocol initialization
-        ext void MET_Can_Protocol_Init(MET_commandHandler_t pCommandHandler);
+        ext void MET_Can_Protocol_Init(uint8_t devId, uint8_t statReg, uint8_t dataReg, uint8_t paramReg, uint8_t appMaj, uint8_t appMin, uint8_t appSub, MET_commandHandler_t pCommandHandler);
         
         /// Application Main Loop function handler
         void MET_Can_Protocol_Loop(void);  
+        
      /** @}*/  // metCanApi
         
     /** 
