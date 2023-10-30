@@ -46,8 +46,10 @@
  * 
  * This Module makes use of the following Processor modules:
  * - CAN0 peripheral module;
+ * - CAN1 peripheral module (optional);
  * - Peripheral Can0 clock;
- * - PIN Assignement;
+ * - Peripheral Can1 clock (optional);
+ * - PIN Assignment;
  * - SYSTEM Memory;
  * 
  * ## SYSTEM Peripheral module setup
@@ -70,8 +72,10 @@
  * 
  * + The CAN TX Input shall be configured with CAN0-TX 
  * + The CAN RX Input shall be configured with CAN0-TX 
+ * + The Bridge CAN TX Input shall be configured with CAN1-TX (optional)
+ * + The Bridge CAN RX Input shall be configured with CAN1-TX (optional) 
  * 
- * ## Peripheral Clock Settings
+ * ## Peripheral Clock Settings 
  * 
  *+ Activate the GLK4 Clock:
  *   + Set the DFLL (48MHz) as the Input clock;
@@ -95,10 +99,14 @@
  * 
  * + Use RX FIFO 1: Yes
  *   + RX FIFO 1 Setting
- *      + Number of element: 1
+ *      + Number of element: 16
+ * 
+ * + Use TX FIFO: Yes
+ *   + TX FIFO Setting
+ *      + Number of element: 16 
  * 
  * + Standard Filters 
- *  + Number Of STandard Filters: 2
+ *  + Number Of STandard Filters: 4
  * 
  *  + Standard Filter 1
  *      + Type: Range;
@@ -110,14 +118,68 @@
  *      + Type: Range;
  *      + ID1: 0x100 + Device ID  
  *      + ID2: 0x100 + Device ID 
+ *      + Element Configuration: Store in RX FIFO 0
+ * 
+ *  + Standard Filter 3
+ *      + Type: Range;
+ *      + ID1: 0  
+ *      + ID2: 0 
  *      + Element Configuration: Store in RX FIFO 1
  * 
+ *  + Standard Filter 4
+ *      + Type: Range;
+ *      + ID1: 0x603  
+ *      + ID2: 0x607
+ *      + Element Configuration: Store in RX FIFO 1
+
  *  + Reject Standard Remote Frames: YES
  * 
  *  + Timestamp Enable: YES 
  * 
  * ```
  *
+ * 
+ *  * ## CAN1 configuration (for Motor Bridge only)
+ * 
+ * ```text
+ * 
+ * + CAN Operational Mode = NORMAL;
+ * + Interrupt Mode: Yes;
+ * + Bit Timing Calculation
+ *  + Nominal Bit Timing
+ *      + Automatic Nominal Bit Timing: Yes;
+ *      + BIt Rate: 1000
+ * 
+ * + Use RX FIFO 0: Yes
+ *   + RX FIFO 0 Setting
+ *      + Number of element: 1
+ * 
+ * + Use RX FIFO 1: No
+ * 
+ * + Use TX FIFO: Yes
+ *   + TX FIFO Setting
+ *      + Number of element: 16 
+ *
+ * + Standard Filters 
+ *  + Number Of STandard Filters: 2
+ * 
+ *  + Standard Filter 1
+ *      + Type: Range;
+ *      + ID1: 0  
+ *      + ID2: 0 
+ *      + Element Configuration: Store in RX FIFO 0
+ * 
+ *  + Standard Filter 2
+ *      + Type: Range;
+ *      + ID1: 0x603  
+ *      + ID2: 0x607
+ *      + Element Configuration: Store in RX FIFO 0
+
+ *  + Reject Standard Remote Frames: YES
+ * 
+ *  + Timestamp Enable: YES 
+ * 
+ * ```
  *  # Application Usage
  * 
  *  The Application shall define the structure of the Protocol registers:
@@ -126,6 +188,8 @@
  * + shall define the number of PARAMETER registers;
  * + Shall instantiate the Command callback function;
  * 
+ * + In case the implementation makes use of the Motor Bridge from Can0 to Can1 
+ *   the application shall define #define _MET_MOTOR_BRIDGE_ in top of the headers 
  * + The Application initializes the module with the MET_Can_Protocol_Init() function;
  * + The Application shall call the MET_Can_Protocol_Loop() function in the main loop;
  *   
@@ -434,6 +498,13 @@
         
         /// Can protocol initialization
         ext void MET_Can_Protocol_Init(uint8_t devId, uint8_t statReg, uint8_t dataReg, uint8_t paramReg, uint8_t appMaj, uint8_t appMin, uint8_t appSub, MET_commandHandler_t pCommandHandler);
+        
+        /**
+         * If _MET_MOTOR_BRIDGE_ define is present 
+         * this function activates the communication bridge from 
+         * CAN0-FIFO1 reception and CAN1-FIFO0 reception 
+         */
+        ext void MET_InitCanBridge(void);
         
         /// Application Main Loop function handler
         void MET_Can_Protocol_Loop(void);  
