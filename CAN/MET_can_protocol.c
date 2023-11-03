@@ -812,7 +812,7 @@ void MET_Can_Protocol_Reception_Callback(uintptr_t context)
     if (((status & CAN_PSR_LEC_Msk) == CAN_ERROR_NONE) || ((status & CAN_PSR_LEC_Msk) == CAN_ERROR_LEC_NC))
     {
         
-       if(MET_Can_Protocol_RxTx_Struct.rx_messageID >= _CAN_ID_BOOTLOADER_ADDRESS)   rxReceptionTrigger = true;
+       if(MET_Can_Protocol_RxTx_Struct.rx_messageID >= _CAN_ID_BASE_ADDRESS)   rxReceptionTrigger = true;
        else rxBootloaderReceptionTrigger = true;
        
     }    else 
