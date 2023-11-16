@@ -29,7 +29,8 @@
          */
         typedef struct {
             uint8_t deviceID; //!< This is the device ID from 1:255
-
+            bool device_reset;//!< This is the flag set to true at the startup
+            
             MET_Revision_Register_t     revisionRegister;        //!< Revision Register
             MET_Errors_Register_t       errorsRegister;          //!< Errors register
             MET_Command_Register_t      commandRegister;         //!< Command Execution  register
@@ -188,6 +189,7 @@ void MET_Can_Protocol_Init(uint8_t devId, uint8_t statReg, uint8_t dataReg, uint
     
     // Assignes the current device ID
     MET_Protocol_Data_Struct.deviceID = devId;
+    MET_Protocol_Data_Struct.device_reset = true;
     
     // Harmony 3 library call: Init memory of the CAN Bus module
     CAN0_MessageRAMConfigSet(Can0MessageRAM);
@@ -568,6 +570,25 @@ void MET_Can_Application_Loop(void){
         // Copy the received to the data that will be retransmitted 
         memcpy(MET_Can_Protocol_RxTx_Struct.tx_message, MET_Can_Protocol_RxTx_Struct.rx_message,8);
         
+        // If the module has been reset, the first answer is a reset code
+        if(MET_Protocol_Data_Struct.device_reset){
+            MET_Protocol_Data_Struct.device_reset = false;
+            
+            // Change the ack command code to the RESET code, to inform the MCPU that the device has been reset
+            cmdFrame = (MET_Can_Frame_t*) &MET_Can_Protocol_RxTx_Struct.tx_message;
+            cmdFrame->frame_cmd = MET_CAN_PROTOCOL_RESET_CODE;
+            
+             // Calcs the CRC of the buffer to be sent 
+            crc = 0;
+            for(i=0; i<7; i++) crc ^=  MET_Can_Protocol_RxTx_Struct.tx_message[i];
+            MET_Can_Protocol_RxTx_Struct.tx_message[7] = crc;
+
+            // Sends the buffer to the caller
+            CAN0_MessageTransmit(_CAN_ID_BASE_ADDRESS + MET_Protocol_Data_Struct.deviceID, 8, MET_Can_Protocol_RxTx_Struct.tx_message, CAN_MODE_NORMAL, CAN_MSG_ATTR_TX_FIFO_DATA_FRAME);  
+            MET_Can_Protocol_Reception_Trigger(); // Reschedule the new data reception
+            return;
+            
+        }
         
         // Identifies the Protocol command
         switch(cmdFrame->frame_cmd){
@@ -736,6 +757,9 @@ void MET_Can_Bootloader_Loop(void){
             return;
         }
 
+        // If the device receives any Bootloader command, automatically resets the reset bit
+        MET_Protocol_Data_Struct.device_reset = false;
+        
         // Copy the received to the data that will be retransmitted 
         memcpy(MET_Can_Protocol_RxTx_Struct.tx_message, MET_Can_Protocol_RxTx_Struct.rx_message,8);
         

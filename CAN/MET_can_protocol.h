@@ -289,7 +289,8 @@
             MET_CAN_PROTOCOL_WRITE_DATA,        //!< Write Data Registers frame type
             MET_CAN_PROTOCOL_WRITE_PARAM,       //!< Write Parameter Registers frame type
             MET_CAN_PROTOCOL_STORE_PARAMS,      //!< Store Parameters command frame 
-            MET_CAN_PROTOCOL_COMMAND_EXEC       //!< Command Execution frame
+            MET_CAN_PROTOCOL_COMMAND_EXEC,      //!< Command Execution frame
+            MET_CAN_PROTOCOL_RESET_CODE         //!< Reset Code 
         }MET_FRAME_CODES;
         
          /** 
